@@ -1,4 +1,4 @@
-name: Rust
+name: 'Build & Publish'
 
 on:
   push:
@@ -9,48 +9,49 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  name: Publish for ${{ matrix.os }}
-  runs-on: ${{ matrix.os }}
-  strategy:
-    matrix:
-      include:
-        - os: ubuntu-latest
-          asset_name: installer-linux.zip
-          commands: |
-            mkdir -p installer/utility
-            mv target/release/aiosaber-client installer/
-            mv install/utility/serviceman-linux installer/utility/
-            mv install/linux-* installer/
-            zip -r installer.zip installer/*
-        - os: windows-latest
-          asset_name: installer-win.zip
-          commands: |
-            mkdir installer\utility
-            move target\release\aiosaber-client.exe installer\
-            move install\utility\serviceman-win.exe installer\utility\
-            move install\windows-* installer\
-            tar -c -a -f installer.zip installer\*
-        - os: macos-latest
-          asset_name: installer-mac.zip
-          commands: |
-            mkdir -p installer/utility
-            mv target/release/aiosaber-client installer/
-            mv install/utility/serviceman-mac installer/utility/
-            mv install/mac-* installer/
-            zip -r installer.zip installer/*
+  publish:
+    name: Publish for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_name: installer-linux.zip
+            commands: |
+              mkdir -p installer/utility
+              mv target/release/aiosaber-client installer/
+              mv install/utility/serviceman-linux installer/utility/
+              mv install/linux-* installer/
+              zip -r installer.zip installer/*
+          - os: windows-latest
+            asset_name: installer-win.zip
+            commands: |
+              mkdir installer\utility
+              move target\release\aiosaber-client.exe installer\
+              move install\utility\serviceman-win.exe installer\utility\
+              move install\windows-* installer\
+              tar -c -a -f installer.zip installer\*
+          - os: macos-latest
+            asset_name: installer-mac.zip
+            commands: |
+              mkdir -p installer/utility
+              mv target/release/aiosaber-client installer/
+              mv install/utility/serviceman-mac installer/utility/
+              mv install/mac-* installer/
+              zip -r installer.zip installer/*
 
-  steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --release --locked
-    - name: Create installer.zip
-      run: ${{ matrix.commands }}
-    - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@v2
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: installer.zip
-        asset_name: ${{ matrix.asset_name }}
-        tag: ${{ github.ref }}
-        overwrite: true
-        body: "Release ${{ github.ref }}"
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --release --locked
+      - name: Create installer.zip
+        run: ${{ matrix.commands }}
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: installer.zip
+          asset_name: ${{ matrix.asset_name }}
+          tag: ${{ github.ref }}
+          overwrite: true
+          body: "Release ${{ github.ref }}"
