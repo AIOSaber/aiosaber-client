@@ -5,7 +5,7 @@ mod config;
 mod beatsaver;
 mod installer;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(not(target_family = "windows"))]
 use jemallocator::Jemalloc;
 use env_logger::Env;
 use crate::webserver::WebServer;
@@ -17,7 +17,7 @@ use std::env;
 use crate::config::DaemonConfig;
 use crate::installer::Installer;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(not(target_family = "windows"))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
@@ -29,6 +29,10 @@ async fn main() {
 
     if env::args().len() > 1 {
         let operator: String = env::args().nth(1).unwrap();
+        if operator.eq("--dry-run") {
+            return;
+        }
+
         if operator.eq("--privileged-one-click") {
             crate::one_click::privileged_setup();
             return;
@@ -56,7 +60,7 @@ async fn main() {
                             match installer {
                                 Installer::PC(installer) => {
                                     installer.install_map(folder_name.clone(), download_url.clone()).await;
-                                },
+                                }
                                 Installer::Quest(_installer) => {
                                     info!("Lol quest unsupported")
                                 }
