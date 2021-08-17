@@ -2,7 +2,8 @@ name: Rust
 
 on:
   push:
-    branches: [ master, test_ci ]
+    tags:
+      - '*'
 
 env:
   CARGO_TERM_COLOR: always
@@ -10,9 +11,25 @@ env:
 jobs:
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --release
+    - name: Create installer.zip
+      run: |
+        mkdir installer\utility
+        move target\release\aiosaber-client.exe installer\
+        move install\utility\serviceman-win.exe installer\utility\
+        move install\windows-* installer\
+        tar -c -a -f installer.zip installer\*
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: installer.zip
+        asset_name: installer.zip
+        tag: ${{ github.ref }}
+        overwrite: true
+        body: "Release ${{ github.ref }}"
