@@ -28,7 +28,16 @@ pub async fn resolve_download_url(hash: String) -> Result<(String, String), Stri
                             .and_then(|value| value.as_str())
                             .map(|str| str.to_owned());
                         let name: String = node.as_object()
-                            .and_then(|obj| obj.get("name"))
+                            .and_then(|obj| obj.get("metadata"))
+                            .and_then(|value| value.as_object())
+                            .and_then(|obj| obj.get("songName"))
+                            .and_then(|value| value.as_str())
+                            .map(|str| str.to_owned())
+                            .unwrap_or("No Name".to_string());
+                        let author: String = node.as_object()
+                            .and_then(|obj| obj.get("metadata"))
+                            .and_then(|value| value.as_object())
+                            .and_then(|obj| obj.get("levelAuthorName"))
                             .and_then(|value| value.as_str())
                             .map(|str| str.to_owned())
                             .unwrap_or("No Name".to_string());
@@ -36,6 +45,8 @@ pub async fn resolve_download_url(hash: String) -> Result<(String, String), Stri
                             let mut full_name = hash.clone();
                             full_name.push_str(" (");
                             full_name.push_str(name.as_str());
+                            full_name.push_str(" - ");
+                            full_name.push_str(author.as_str());
                             full_name.push_str(")");
                             Ok((download_url, full_name))
                         } else {
