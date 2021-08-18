@@ -26,15 +26,15 @@ pub fn register_one_click() -> Result<String, String> {
                         info!("Installation succeeded");
                         Ok("Success".to_string())
                     } else {
-                        error!("Setup script returned an error. Consider running it manually: ~/.aiosaber/client/mac-install-oneclick.sh".to_string());
+                        error!("Setup script returned an error. Consider running it manually: ~/.aiosaber/client/mac-install-oneclick.sh");
                         Err("Setup script returned an error. Consider running it manually: ~/.aiosaber/client/mac-install-oneclick.sh".to_string())
                     }
                 }
                 Err(err) => {
                     error!("One-Click installer failed to start: {}", err);
                     let mut msg = "One-Click installer failed to start: ".to_string();
-                    msg.push_str(err.description());
-                    Err(msg);
+                    msg.push_str(err.to_string().as_str());
+                    Err(msg)
                 }
             }
         }
