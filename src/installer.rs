@@ -87,9 +87,10 @@ impl QuestInstaller {
                 info!("Using ADB via USB");
             } else {
                 info!("Trying to use ADB @ {}", adb_target);
-                let mut connect_cmd = "adb connect ".to_owned();
-                connect_cmd.push_str(adb_target);
-                match execute_adb(connect_cmd) {
+                match execute_adb("adb".to_owned(), vec![
+                    "connect",
+                    adb_target
+                ]) {
                     Ok(_) => info!("adb: Connected via network"),
                     Err(err) => {
                         if let Some(err) = err {
@@ -103,9 +104,12 @@ impl QuestInstaller {
             let mut dst_folder = "/sdcard/ModData/com.beatgames.beatsaber/Mods/SongLoader/CustomLevels/".to_owned();
             dst_folder.push_str(full_name.as_str());
             dst_folder.push_str("/");
-            let mut command = "adb shell mkdir -p ".to_owned();
-            command.push_str(dst_folder.as_str());
-            match execute_adb(command) {
+            match execute_adb("adb".to_owned(), vec![
+                "shell",
+                "mkdir",
+                "-p",
+                dst_folder.as_str()
+            ]) {
                 Ok(_) => info!("adb: Created folder"),
                 Err(err) => {
                     if let Some(err) = err {
@@ -115,11 +119,13 @@ impl QuestInstaller {
                     }
                 }
             }
-            let mut push_cmd = "adb push ".to_owned();
-            push_cmd.push_str(tmp_dir.to_str().unwrap());
-            push_cmd.push_str("/. ");
-            push_cmd.push_str(dst_folder.as_str());
-            match execute_adb(push_cmd) {
+            let mut tmp_dir_adb = tmp_dir.to_str().unwrap().to_owned();
+            tmp_dir_adb.push_str("/.");
+            match execute_adb("adb".to_owned(), vec![
+                "push",
+                tmp_dir_adb.as_str(),
+                dst_folder.as_str()
+            ]) {
                 Ok(_) => info!("adb: Copied files"),
                 Err(err) => {
                     if let Some(err) = err {
@@ -280,10 +286,13 @@ fn as_zip_archive(bytes: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>, ()> {
     Err(())
 }
 
-fn execute_adb(command: String) -> Result<(), Option<std::io::Error>> {
+pub(crate) fn execute_adb(command: String, args: Vec<&str>) -> Result<(), Option<std::io::Error>> {
     let mut cmd = Command::new(command.clone());
+    for arg in args {
+        cmd.arg(arg);
+    }
     if let Some(path) = env::var("PATH").ok() {
-        info!("Starting ADB command {} with PATH {}", command, path.as_str());
+        debug!("Starting command {} with PATH {}", command, path.as_str());
         cmd.env("PATH", path);
     } else {
         warn!("No path variable found to forward to subprocess");

@@ -31,6 +31,19 @@ async fn main() {
     if env::args().len() > 1 {
         let operator: String = env::args().nth(1).unwrap();
 
+        if operator.eq("--test-adb") {
+            match installer::execute_adb("adb".to_owned(), vec!["version"]) {
+                Ok(_) => info!("ADB found & successfully executed"),
+                Err(err) => if let Some(error) = err {
+                    error!("Couldn't start command: {}", error);
+                    error!("If it couldn't find the file, it means ADB is not properly installed and/or not in PATH.");
+                } else {
+                    error!("ADB version call failed");
+                }
+            };
+            return;
+        }
+
         if operator.eq("--test-curl") {
             let mut easy = Easy::new();
             easy.url("https://ipinfo.io").unwrap();
