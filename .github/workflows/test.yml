@@ -1,4 +1,4 @@
-name: 'Build & Publish'
+name: 'Test Build'
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ env:
 
 jobs:
   test:
-    name: Test Build for ${{ matrix.os }}
+    name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
