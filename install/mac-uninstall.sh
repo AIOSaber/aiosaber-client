@@ -8,3 +8,4 @@ pkill -f "aiosaber-client"
 rm -f ~/.local/opt/serviceman/bin/serviceman.aiosaber-client
 rm -f ~/.local/opt/serviceman/etc/aiosaber-client.json
 rm -rf ~/.aiosaber
+rm -rf /Applications/uri-handler.app/

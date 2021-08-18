@@ -1,8 +1,10 @@
 #!/bin/bash
 mkdir -p ~/.aiosaber/client/
+cp mac-uninstall.sh ~/.aiosaber/client/
 cp utility/serviceman-mac ~/.aiosaber/client/
 cp aiosaber-client ~/.aiosaber/client/
 cp mac-install-oneclick.sh ~/.aiosaber/client/
+cp -r mac-oneclick-util/ ~/.aiosaber/client/
 cd ~/.aiosaber/client/ || exit
 chmod +x serviceman-mac
 chmod +x aiosaber-client
