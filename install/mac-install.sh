@@ -12,7 +12,7 @@ echo "Read: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unid
 echo "Once you're ready to do that, press ENTER"
 read -r
 echo "Please approve 'serviceman' - It's used to manage daemon jobs across multiple operating systems"
-./serviceman
+./serviceman-mac
 echo "Once it is approved, please press ENTER again"
 read -r
 echo "Please approve 'aiosaber-client' - It's the daemon binary for AIOSaber"
