@@ -2,8 +2,6 @@
 use powershell_script;
 use log::{info, error};
 use std::env;
-use std::io::Error;
-use std::process::Child;
 
 pub fn register_one_click() {
     #[cfg(target_family = "windows")]
