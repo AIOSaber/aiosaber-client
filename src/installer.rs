@@ -1,6 +1,6 @@
 use crate::websocket_handler::{ConfigData, InstallType};
 use std::time::Duration;
-use log::{debug, info, error};
+use log::{debug, info, warn, error};
 use std::io::{Cursor, Read, Seek};
 use zip::ZipArchive;
 use zip::result::ZipError;
@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use crate::installer::Installer::{PC, Quest};
 use crate::beatsaver::{BeatSaverMap, MapVersion};
 use tokio::task::JoinHandle;
-use curl::easy::Form;
+use curl::easy::{Form, List};
 use std::process::Command;
 
 #[derive(Clone)]
@@ -136,18 +136,24 @@ impl QuestInstaller {
             bmbf_host.push_str("/host/beatsaber/upload");
             let mut bmbf_referer = self.config.install_location.clone();
             bmbf_referer.push_str("/main/upload");
+            let mut referer_header = "Referer: ".to_owned();
+            referer_header.push_str(bmbf_referer.as_str());
             let data = data.clone();
             Some(tokio::spawn(async move {
                 let mut curl = curl::easy::Easy::new();
-                curl.url(bmbf_host.as_str()).ok();
-                curl.post(true).ok();
+                curl.url(bmbf_host.as_str()).unwrap();
+                curl.post(true).unwrap();
+                let mut headers = List::new();
+                headers.append(referer_header.as_str()).unwrap();
+                headers.append("Connection: keep-alive").unwrap();
+                curl.http_headers(headers).unwrap();
                 let mut form = Form::new();
                 form.part("file")
-                    .filename(version.hash.as_str())
-                    .contents(data.as_ref())
+                    .buffer(version.hash.as_str(), data)
                     .add()
-                    .ok();
-                curl.httppost(form).ok();
+                    .unwrap();
+                curl.httppost(form).unwrap();
+                curl.verbose(true).unwrap();
                 match curl.perform() {
                     Ok(_) => {
                         let response_code = curl.response_code().unwrap_or(0);
@@ -275,8 +281,13 @@ fn as_zip_archive(bytes: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>, ()> {
 }
 
 fn execute_adb(command: String) -> Result<(), Option<std::io::Error>> {
-    match Command::new(command)
-        .spawn() {
+    let mut cmd = Command::new(command);
+    if let Some(path) = env::var("PATH").ok() {
+        cmd.env("PATH", path);
+    } else {
+        warn!("No path variable found to forward to subprocess");
+    }
+    match cmd.spawn() {
         Ok(mut process) => {
             if process.wait()
                 .map(|status| status.success())
