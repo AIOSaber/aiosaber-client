@@ -32,3 +32,31 @@ Well, right now it doesn't do much, just yet.
 You can download maps to your pc and/or your quest from Windows/MacOS via OneClick-Installer.
 
 **To get the OneClick-Install Button on BeatSaver check [this](https://github.com/AIOSaber/BeatSaver-Extension)**
+
+
+# How do I get it?
+
+## Download
+
+You can get the latest version for your operating system [here](https://github.com/AIOSaber/aiosaber-client/releases)
+
+## How to install
+
+### Windows
+
+* Download the ZIP for Windows
+* Unzip it
+* Double click the install batch file
+
+### MacOS
+
+* Download the ZIP for Mac
+* Unzip it
+* Open the folder in Terminal
+* Start the mac-install.sh via `./mac-install.sh`
+* Read the output. Read it **carefully**.
+* Handle the prompts
+
+### Linux/Ubuntu
+
+Rly? Untested. There's an installer, feel free to test it and report a bug if it doesnt work. Should be similar to MacOS
