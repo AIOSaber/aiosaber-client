@@ -68,7 +68,8 @@ impl PcInstaller {
 
 impl QuestInstaller {
     pub fn install_map(&self, version: MapVersion, data: Vec<u8>) -> Option<JoinHandle<Result<(), String>>> {
-        let full_name = version.clone().hash;
+        let mut full_name = "custom_level_".to_owned();
+        full_name.push_str(version.clone().hash.as_str());
 
         if self.config.install_location.starts_with("adb://") {
             let mut unpack_dir = env::current_dir().unwrap();
@@ -149,11 +150,10 @@ impl QuestInstaller {
                 curl.http_headers(headers).unwrap();
                 let mut form = Form::new();
                 form.part("file")
-                    .buffer(version.hash.as_str(), data)
+                    .buffer(full_name.as_str(), data)
                     .add()
                     .unwrap();
                 curl.httppost(form).unwrap();
-                curl.verbose(true).unwrap();
                 match curl.perform() {
                     Ok(_) => {
                         let response_code = curl.response_code().unwrap_or(0);
@@ -281,8 +281,9 @@ fn as_zip_archive(bytes: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>, ()> {
 }
 
 fn execute_adb(command: String) -> Result<(), Option<std::io::Error>> {
-    let mut cmd = Command::new(command);
+    let mut cmd = Command::new(command.clone());
     if let Some(path) = env::var("PATH").ok() {
+        info!("Starting ADB command {} with PATH {}", command, path.as_str());
         cmd.env("PATH", path);
     } else {
         warn!("No path variable found to forward to subprocess");
