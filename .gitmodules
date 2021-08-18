@@ -1,0 +1,3 @@
+[submodule "install/mac-oneclick-util"]
+	path = install/mac-oneclick-util
+	url = https://github.com/AIOSaber/uri-handler.git

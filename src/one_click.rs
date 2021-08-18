@@ -2,8 +2,6 @@
 use powershell_script;
 use log::{info, error};
 use std::env;
-use std::io::Error;
-use std::process::Child;
 
 pub fn register_one_click() {
     #[cfg(target_family = "windows")]
@@ -17,7 +15,8 @@ pub fn register_one_click() {
         {
             use::std::process::Command;
             let dir = env::current_dir().unwrap().clone();
-            match Command::new("/bin/bash ./mac-install-oneclick.sh")
+            info!("Starting oneclick installation in directory {}", dir.display());
+            match Command::new("./mac-install-oneclick.sh")
                 .current_dir(dir)
                 .spawn() {
                 Ok(mut process) => {

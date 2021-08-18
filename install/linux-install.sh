@@ -1,5 +1,6 @@
 #!/bin/bash
 mkdir -p ~/.aiosaber/client/
+cp linux-uninstall.sh ~/.aiosaber/client/
 cp utility/serviceman-linux ~/.aiosaber/client/
 cp aiosaber-client ~/.aiosaber/client/
 cd ~/.aiosaber/client/ || exit

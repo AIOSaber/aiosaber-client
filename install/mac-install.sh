@@ -1,8 +1,11 @@
 #!/bin/bash
 mkdir -p ~/.aiosaber/client/
+cp mac-uninstall.sh ~/.aiosaber/client/
 cp utility/serviceman-mac ~/.aiosaber/client/
 cp aiosaber-client ~/.aiosaber/client/
 cp mac-install-oneclick.sh ~/.aiosaber/client/
+mkdir -p ~/.aiosaber/client/mac-oneclick-util
+cp -r mac-oneclick-util/ ~/.aiosaber/client/mac-oneclick-util
 cd ~/.aiosaber/client/ || exit
 chmod +x serviceman-mac
 chmod +x aiosaber-client
@@ -12,7 +15,7 @@ echo "Read: https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unid
 echo "Once you're ready to do that, press ENTER"
 read -r
 echo "Please approve 'serviceman' - It's used to manage daemon jobs across multiple operating systems"
-./serviceman
+./serviceman-mac
 echo "Once it is approved, please press ENTER again"
 read -r
 echo "Please approve 'aiosaber-client' - It's the daemon binary for AIOSaber"
