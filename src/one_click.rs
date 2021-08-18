@@ -7,14 +7,14 @@ use std::env;
 
 pub fn register_one_click() -> Result<String, String> {
     #[cfg(target_family = "windows")]
-        return {
+        {
             let mut command = r#"Start-Process powershell -Verb runAs -ArgumentList ""#.to_owned();
             command.push_str(env::current_exe().unwrap().to_str().unwrap());
             command.push_str(r#" --privileged-one-click""#);
             execute_command_with_logs(command.as_str())
-        };
+        }
     #[cfg(target_os = "macos")]
-        return {
+        {
             use ::std::process::Command;
             let dir = env::current_dir().unwrap().clone();
             info!("Starting oneclick installation in directory {}", dir.display());
@@ -39,8 +39,10 @@ pub fn register_one_click() -> Result<String, String> {
                     Err(msg)
                 }
             }
-        };
-    Err("Unsupported platform".to_string())
+        }
+
+    #[cfg(target_os = "linux")]
+        Err("Unsupported platform".to_string())
 }
 
 pub fn privileged_setup() {
