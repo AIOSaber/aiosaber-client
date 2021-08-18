@@ -17,6 +17,7 @@ pub enum WebSocketMessage {
     Connected(Vec<ConfigData>),
     UpdateConfig(Vec<ConfigData>),
     SetupOneClick(),
+    ResultResponse(ResultMsg),
     InstallMaps(InstallData),
     InstallPcMods(InstallData),
     InstallQuestMods(InstallData),
@@ -36,6 +37,12 @@ pub struct ConfigData {
 pub enum InstallType {
     PC,
     Quest,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct ResultMsg {
+    success: bool,
+    msg: String,
 }
 
 impl ToString for InstallType {
@@ -77,7 +84,7 @@ impl WebSocketHandler {
         WebSocketHandler {
             rx,
             tx,
-            config
+            config,
         }
     }
 
@@ -118,8 +125,16 @@ impl WebSocketHandler {
             }
             WebSocketMessage::SetupOneClick() => {
                 info!("Setting up one-click...");
-                crate::one_click::register_one_click();
-                None
+                let result = crate::one_click::register_one_click();
+                let success = result.is_ok();
+                let msg = match result {
+                    Ok(msg) => msg,
+                    Err(msg) => msg
+                };
+                Some(WebSocketMessage::ResultResponse(ResultMsg {
+                    success,
+                    msg,
+                }))
             }
             WebSocketMessage::InstallMaps(_maps) => None,
             WebSocketMessage::InstallPcMods(_mods) => None,
