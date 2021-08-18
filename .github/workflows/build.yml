@@ -22,7 +22,6 @@ jobs:
               mv target/release/aiosaber-client installer/
               mv install/utility/serviceman-linux installer/utility/
               mv install/linux-* installer/
-              chmod -R -x installer/
               zip -r installer.zip installer/*
           - os: windows-latest
             asset_name: installer-win.zip
@@ -39,7 +38,6 @@ jobs:
               mv target/release/aiosaber-client installer/
               mv install/utility/serviceman-mac installer/utility/
               mv install/mac-* installer/
-              chmod -R -x installer/
               zip -r installer.zip installer/*
 
     steps:
