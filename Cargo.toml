@@ -20,6 +20,9 @@ yaml-rust = "0.4.5"
 zip = "0.5.13"
 chrono = { version = "0.4.19", features = ["serde"] }
 curl = "0.4.38"
+thiserror = "1.0.26"
+sha1 = { version = "0.6.0", features = ["std"] }
+uuid = { version = "0.8.2", features = ["serde", "v4"] }
 
 [target.'cfg(target_family = "windows")'.dependencies]
 powershell_script = "0.2.1"

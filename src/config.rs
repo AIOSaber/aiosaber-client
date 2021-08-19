@@ -8,10 +8,30 @@ use log::{info, warn, error};
 use std::str::FromStr;
 use crate::installer::Installer;
 use std::env;
+use std::collections::VecDeque;
+
+#[derive(Clone)]
+pub struct LocalData {
+    pub config: ConfigData,
+    pub map_queue: VecDeque<String>,
+    pub mod_queue: VecDeque<String>,
+    pub map_index: MapIndex,
+}
+
+#[derive(Clone)]
+pub struct MapIndex(Vec<MapMeta>);
+
+#[derive(Clone)]
+pub struct MapMeta {
+    pub path: std::path::PathBuf,
+    pub hash: String,
+    pub version: u8,
+    pub id: u32,
+}
 
 #[derive(Clone)]
 pub struct DaemonConfig {
-    current_configs: Arc<Mutex<Vec<ConfigData>>>
+    current_configs: Arc<Mutex<Vec<LocalData>>>,
 }
 
 impl DaemonConfig {
@@ -21,7 +41,7 @@ impl DaemonConfig {
         }
     }
 
-    fn read_from_file() -> Vec<ConfigData> {
+    fn read_from_file() -> Vec<LocalData> {
         let mut path = env::current_dir().unwrap().clone();
         path.push("daemon-config.yaml");
         let mut vec = Vec::new();
@@ -33,7 +53,7 @@ impl DaemonConfig {
                     Ok(docs) => {
                         for yaml in docs {
                             if let Ok(config) = DaemonConfig::read_yaml_doc(yaml) {
-                                vec.push(config);
+                                vec.push(DaemonConfig::config_data_to_local_data(config));
                             }
                         }
                     }
@@ -51,6 +71,10 @@ impl DaemonConfig {
 
     fn read_yaml_doc(yaml: Yaml) -> Result<ConfigData, ()> {
         if let Some(map) = yaml.as_hash() {
+            let id = map.get(&Yaml::String("id".to_string()))
+                .and_then(|yaml| yaml.as_str())
+                .map(|str| uuid::Uuid::from_str(str).unwrap())
+                .unwrap_or_else(|| uuid::Uuid::new_v4());
             let rest_token = map.get(&Yaml::String("restToken".to_string()))
                 .and_then(|yaml| yaml.as_str())
                 .map(|str| str.to_string());
@@ -64,6 +88,7 @@ impl DaemonConfig {
                 .zip(install_type)
                 .zip(install_location) {
                 return Ok(ConfigData {
+                    id,
                     rest_token,
                     install_type,
                     install_location,
@@ -73,12 +98,22 @@ impl DaemonConfig {
         Err(())
     }
 
+    fn config_data_to_local_data(config: ConfigData) -> LocalData {
+        LocalData {
+            config,
+            map_queue: Default::default(),
+            mod_queue: Default::default(),
+            map_index: MapIndex(Vec::new()),
+        }
+    }
+
     fn write_to_file(configs: Vec<ConfigData>) {
         info!("Writing changed config to file...");
         let mut out_str = String::new();
         let mut emitter = YamlEmitter::new(&mut out_str);
         for config_data in configs {
             let mut hash = yaml_rust::yaml::Hash::new();
+            hash.insert(Yaml::String("id".to_owned()), Yaml::String(config_data.id.to_hyphenated().to_string()));
             hash.insert(Yaml::String("restToken".to_owned()), Yaml::String(config_data.rest_token.clone()));
             hash.insert(Yaml::String("installType".to_owned()), Yaml::String(config_data.install_type.to_string()));
             hash.insert(Yaml::String("installLocation".to_owned()), Yaml::String(config_data.install_location.clone()));
@@ -100,7 +135,11 @@ impl DaemonConfig {
         let mut mutex = self.current_configs.lock().await;
         mutex.clear();
         for config_data in configs {
-            mutex.push(config_data);
+            mutex.iter_mut().for_each(|local_data| {
+                if local_data.config.id.eq(&config_data.id) {
+                    local_data.config = config_data.clone();
+                }
+            });
         }
         std::mem::drop(mutex);
         let configs = self.get_configs().await;
@@ -111,8 +150,17 @@ impl DaemonConfig {
     pub async fn get_configs(&self) -> Vec<ConfigData> {
         let mutex = self.current_configs.lock().await;
         let mut vec = Vec::new();
-        for config in mutex.iter() {
-            vec.push(config.clone());
+        for local_data in mutex.iter() {
+            vec.push(local_data.config.clone());
+        }
+        vec
+    }
+
+    pub async fn _get_data(&self) -> Vec<LocalData> {
+        let mutex = self.current_configs.lock().await;
+        let mut vec = Vec::new();
+        for local_data in mutex.iter() {
+            vec.push(local_data.clone());
         }
         vec
     }
@@ -122,7 +170,7 @@ impl Into<Vec<Installer>> for DaemonConfig {
     fn into(self) -> Vec<Installer> {
         let mut vec = Vec::new();
         for config in self.current_configs.try_lock().unwrap().iter() {
-            vec.push(Installer::from(config.clone()));
+            vec.push(Installer::from(config.config.clone()));
         }
         vec
     }

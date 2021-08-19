@@ -4,6 +4,7 @@ mod one_click;
 mod config;
 mod beatsaver;
 mod installer;
+mod map_index;
 
 #[cfg(not(target_family = "windows"))]
 use jemallocator::Jemalloc;
@@ -15,8 +16,8 @@ use log::{info, warn, error};
 use std::process::exit;
 use std::env;
 use crate::config::DaemonConfig;
-use crate::installer::Installer;
 use curl::easy::Easy;
+use std::path::PathBuf;
 
 #[cfg(not(target_family = "windows"))]
 #[global_allocator]
@@ -30,6 +31,71 @@ async fn main() {
 
     if env::args().len() > 1 {
         let operator: String = env::args().nth(1).unwrap();
+
+        if operator.eq("--test-hash") {
+            if env::args().len() != 3 {
+                error!("--test-hash takes exactly one extra argument");
+            } else {
+                let dir = env::args().nth(2).unwrap();
+                info!("Dir is: {}", dir.as_str());
+                let calculated_hash = map_index::generate_hash(
+                    std::path::PathBuf::from_str(dir.as_str()).expect("Path is not a dir")
+                ).expect("Invalid directory");
+                info!("Hash is: {}", calculated_hash.as_str());
+                let map = beatsaver::resolve_map_by_hash(calculated_hash.clone()).await.expect("Map not found!");
+                info!("BeatSaver Map is: {} ({} - {})", map.id, map.metadata.song_name, map.metadata.level_author_name);
+            }
+            return;
+        }
+
+        if operator.eq("--scan-maps") {
+            if env::args().len() != 4 {
+                error!("--scan-maps <--aggressive/--relaxed> <path>");
+            } else {
+                let aggressive = env::args().nth(2).unwrap().eq("--aggressive");
+                let dir = env::args().nth(3).unwrap();
+                let path = std::path::PathBuf::from_str(dir.as_str())
+                    .expect("Path is not a dir");
+                let start = std::time::SystemTime::now();
+                let results = map_index::index_maps(path, aggressive).await.expect("Cannot index");
+                let duration = start.elapsed().unwrap().as_millis();
+                info!("Indexing took: {}ms", duration);
+                let size = results.len();
+                let data = results.iter()
+                    .filter_map(|result| result.as_ref().ok())
+                    .map(|(buf, hash)| (hash.clone(), buf.clone()))
+                    .collect::<Vec<(String, std::path::PathBuf)>>();
+                let mut found = Vec::new();
+                let mut dup = false;
+                for (hash, path) in data {
+                    let dup_path = found.clone().into_iter()
+                        .find_map(| entry: (String, PathBuf) | {
+                            if entry.0.eq(&hash) {
+                                Some(entry.1)
+                            } else {
+                                None
+                            }
+                        });
+                    if let Some(dup_path) = dup_path {
+                        warn!("Duplicate hash: {} @ {}\nFirst found here: {}",
+                              hash.as_str(), path.display(), dup_path.display());
+                        dup = true;
+                        continue;
+                    }
+                    found.push((hash, path));
+                }
+                if !dup {
+                    info!("No duplicates found!");
+                }
+                let err = results.into_iter()
+                    .filter_map(|result| result.err())
+                    .collect::<Vec<map_index::IndexError>>();
+                info!("Total: {} - OK: {} - Failure: {}", size, size-err.len(), err.len());
+                err.into_iter()
+                    .for_each(|err| error!("{}", err));
+            }
+            return;
+        }
 
         if operator.eq("--test-adb") {
             match installer::execute_adb("adb".to_owned(), vec!["version"]) {
@@ -73,62 +139,9 @@ async fn main() {
                 if hash.ends_with("/") {
                     hash.remove(hash.len() - 1);
                 }
-
                 info!("Installing map {}", hash.as_str());
-
-                match beatsaver::resolve_map_by_id(hash).await {
-                    Ok(map) => {
-                        if let Ok((version, data)) = installer::retrieve_map_data(&map).await {
-                            let installers: Vec<Installer> = DaemonConfig::new().into();
-                            let mut futures = Vec::new();
-                            let mut tasks = Vec::new();
-                            if installers.len() == 1 {
-                                // Yes duplicate code, to save memory expensive clones on a single installer, which should be most of the users
-                                match installers.get(0).unwrap() {
-                                    Installer::PC(installer) => {
-                                        installer.install_map(map, data.as_ref());
-                                    }
-                                    Installer::Quest(installer) => {
-                                        if let Some(future) = installer.install_map(version.clone(), data.clone()) {
-                                            futures.push(future);
-                                            tasks.push((installer.clone(), version, data))
-                                        }
-                                    }
-                                }
-                            } else {
-                                for installer in installers {
-                                    match installer {
-                                        Installer::PC(installer) => {
-                                            installer.install_map(map.clone(), data.as_ref());
-                                        }
-                                        Installer::Quest(installer) => {
-                                            if let Some(future) = installer.install_map(version.clone(), data.clone()) {
-                                                futures.push(future);
-                                                tasks.push((installer.clone(), version.clone(), data.clone()))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            info!("Awaiting async tasks...");
-                            let results = futures_util::future::join_all(futures).await;
-                            for i in 0..results.len() {
-                                if let Ok(result) = results.get(i).unwrap() {
-                                    if let Err(_err) = result {
-                                        let (_installer, version, _data) = tasks.get(i).unwrap();
-                                        error!("Task download errored: {}", version.hash);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    Err(error_message) => {
-                        error!("An error occurred during download: {}", error_message);
-                    }
-                }
+                installer::push_to_install_queues(hash).await.ok();
             }
-            info!("This window automatically closes in a few seconds!");
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             return;
         }
     }
