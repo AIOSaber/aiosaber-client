@@ -31,7 +31,7 @@ impl WebServer {
         let web_server = tokio::spawn(async move {
             let cors = warp::cors()
                 .allow_methods(vec!["GET", "POST"])
-                .allow_origins(vec!["https://beatsaver.com", "http://beatsaver.com", "https://scoresaber.com"]);
+                .allow_origins(vec!["https://beatsaver.com", "https://scoresaber.com"]);
 
             let shutdown = warp::get()
                 .and(warp::path("shutdown"))
