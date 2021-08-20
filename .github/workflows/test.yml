@@ -46,6 +46,8 @@ jobs:
           submodules: recursive
       - name: Build
         run: cargo build --locked
+        env:
+          CLIENT_VERSION: "pr-${{ github.head_ref }}"
       - name: Create installer.zip
         run: ${{ matrix.commands }}
       - name: Provide archives for testing

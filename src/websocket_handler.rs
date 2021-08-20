@@ -4,6 +4,7 @@ use log::{info, error};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use crate::config::DaemonConfig;
+use uuid::Uuid;
 
 pub struct WebSocketHandler {
     rx: tokio::sync::mpsc::Receiver<Message>,
@@ -21,13 +22,11 @@ pub enum WebSocketMessage {
     InstallMaps(InstallData),
     InstallPcMods(InstallData),
     InstallQuestMods(InstallData),
-    MapInstalledSuccessfully(),
-    PcModInstalledSuccessfully(),
-    QuestModInstalledSuccessfully(),
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ConfigData {
+    pub id: Uuid,
     pub rest_token: String,
     pub install_type: InstallType,
     pub install_location: String,
@@ -41,8 +40,17 @@ pub enum InstallType {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ResultMsg {
-    success: bool,
-    msg: String,
+    pub(crate) action: String,
+    pub(crate) success: bool,
+    pub(crate) data: ResultMessageData,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum ResultMessageData {
+    Simple(String),
+    MapInstallError(Option<Uuid>, String, String),
+    MapInstallSuccess(Uuid, String, String)
 }
 
 impl ToString for InstallType {
@@ -117,6 +125,7 @@ impl WebSocketHandler {
     }
 
     pub async fn handle_web_socket_message(&self, message: WebSocketMessage) -> Option<WebSocketMessage> {
+        let action = message.to_string();
         match message {
             WebSocketMessage::UpdateConfig(configs) => {
                 info!("Updating configs...");
@@ -132,13 +141,32 @@ impl WebSocketHandler {
                     Err(msg) => msg
                 };
                 Some(WebSocketMessage::ResultResponse(ResultMsg {
+                    action,
                     success,
-                    msg,
+                    data: ResultMessageData::Simple(msg),
                 }))
             }
-            WebSocketMessage::InstallMaps(_maps) => None,
-            WebSocketMessage::InstallPcMods(_mods) => None,
-            WebSocketMessage::InstallQuestMods(_mods) => None,
+            WebSocketMessage::InstallMaps(_maps) => {
+                Some(WebSocketMessage::ResultResponse(ResultMsg {
+                    action,
+                    success: false,
+                    data: ResultMessageData::Simple("Not implemented".to_string()),
+                }))
+            }
+            WebSocketMessage::InstallPcMods(_mods) => {
+                Some(WebSocketMessage::ResultResponse(ResultMsg {
+                    action,
+                    success: false,
+                    data: ResultMessageData::Simple("Not implemented".to_string()),
+                }))
+            }
+            WebSocketMessage::InstallQuestMods(_mods) => {
+                Some(WebSocketMessage::ResultResponse(ResultMsg {
+                    action,
+                    success: false,
+                    data: ResultMessageData::Simple("Not implemented".to_string()),
+                }))
+            }
             _ => {
                 error!("Received client message from server");
                 None
@@ -148,5 +176,19 @@ impl WebSocketHandler {
 
     pub fn send_static(tx: tokio::sync::broadcast::Sender<Message>, message: WebSocketMessage) {
         tx.send(Message::text(serde_json::to_string(&message).unwrap())).ok();
+    }
+}
+
+impl ToString for WebSocketMessage {
+    fn to_string(&self) -> String {
+        match self {
+            WebSocketMessage::Connected(_) => "Connected",
+            WebSocketMessage::UpdateConfig(_) => "UpdateConfig",
+            WebSocketMessage::SetupOneClick() => "SetupOneClick",
+            WebSocketMessage::ResultResponse(_) => "ResultResponse",
+            WebSocketMessage::InstallMaps(_) => "InstallMaps",
+            WebSocketMessage::InstallPcMods(_) => "InstallPcMods",
+            WebSocketMessage::InstallQuestMods(_) => "InstallQuestMods"
+        }.to_string()
     }
 }

@@ -1,5 +1,4 @@
 use crate::websocket_handler::{ConfigData, InstallType};
-use std::time::Duration;
 use log::{debug, info, warn, error};
 use std::io::{Cursor, Read, Seek};
 use zip::ZipArchive;
@@ -7,10 +6,13 @@ use zip::result::ZipError;
 use std::{fs, io, env};
 use std::path::PathBuf;
 use crate::installer::Installer::{PC, Quest};
-use crate::beatsaver::{BeatSaverMap, MapVersion};
+use crate::beatsaver::{BeatSaverMap, MapVersion, BeatSaverError, BeatSaverDownloadError};
 use tokio::task::JoinHandle;
 use curl::easy::{Form, List};
 use std::process::Command;
+use thiserror::Error;
+use std::time::Duration;
+use crate::installer::InstallRequestError::HttpError;
 
 #[derive(Clone)]
 pub enum Installer {
@@ -33,6 +35,45 @@ impl From<ConfigData> for Installer {
         match config.install_type {
             InstallType::PC => PC(PcInstaller { config }),
             InstallType::Quest => Quest(QuestInstaller { config })
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum InstallError {
+    #[error(transparent)]
+    BeatSaverRequestError(#[from] BeatSaverError),
+    #[error(transparent)]
+    BeatSaverDownloadError(#[from] BeatSaverDownloadError),
+}
+
+#[derive(Error, Debug)]
+pub enum InstallRequestError {
+    #[error("An error occurred when trying to post install request: {0}")]
+    HttpError(reqwest::Error),
+    #[error("WebServer responded with an error-code: {0}")]
+    HttpStatusError(u16),
+}
+
+pub async fn push_map_to_install_queues(hash: String) -> Result<(), InstallRequestError> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(5))
+        .build().unwrap();
+    let mut uri = "http://localhost:2706/queue/map/".to_owned();
+    uri.push_str(hash.as_str());
+    let install_request = client.post(uri)
+        .send().await;
+    match install_request {
+        Ok(response) => {
+            if response.status().is_success() {
+                Ok(())
+            } else {
+                Err(InstallRequestError::HttpStatusError(response.status().as_u16()))
+            }
+        }
+        Err(err) => {
+            Err(HttpError(err))
         }
     }
 }
@@ -67,6 +108,7 @@ impl PcInstaller {
 }
 
 impl QuestInstaller {
+    // todo: error types
     pub fn install_map(&self, version: MapVersion, data: Vec<u8>) -> Option<JoinHandle<Result<(), String>>> {
         let mut full_name = "custom_level_".to_owned();
         full_name.push_str(version.clone().hash.as_str());
@@ -137,7 +179,6 @@ impl QuestInstaller {
             }
             None
         } else {
-            // bmbf upload
             let mut bmbf_host = self.config.install_location.clone();
             info!("Uploading map to BMBF @ {}", bmbf_host.as_str());
             bmbf_host.push_str("/host/beatsaber/upload");
@@ -219,52 +260,6 @@ fn unzip_to<R: Read + Seek>(mut archive: ZipArchive<R>, target: PathBuf) {
             io::copy(&mut file, &mut outfile).unwrap();
         }
     }
-}
-
-pub(crate) async fn retrieve_map_data(map: &BeatSaverMap) -> Result<(MapVersion, Vec<u8>), ()> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(30))
-        .build().unwrap();
-
-    // Find latest version
-    let mut version = None;
-    for map_version in &map.versions {
-        if version.is_none() {
-            version = Some(map_version.clone());
-            continue;
-        }
-        if version.clone().unwrap().created_at.gt(&map_version.created_at) {
-            continue;
-        }
-        version = Some(map_version.clone());
-    }
-
-    if version.is_none() {
-        error!("No version found");
-        return Err(());
-    }
-
-    let version = version.unwrap();
-
-    info!("Downloading map with hash {}", version.hash.as_str());
-    let result = client.get(version.download_url.clone())
-        .header("User-Agent", "AIOSaber-Client")
-        .send()
-        .await;
-    match result {
-        Ok(response) => {
-            match response.bytes().await {
-                Ok(bytes) => {
-                    let buf = bytes.clone();
-                    return Ok((version, buf.to_vec()));
-                }
-                Err(error) => error!("An error occurred: {}", error)
-            }
-        }
-        Err(error) => error!("An error occurred: {}", error)
-    }
-    Err(())
 }
 
 fn as_zip_archive(bytes: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>, ()> {

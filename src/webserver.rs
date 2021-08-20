@@ -7,15 +7,18 @@ use tokio::time::Duration;
 use futures_util::{StreamExt, SinkExt, TryFutureExt};
 use crate::websocket_handler::{WebSocketHandler, WebSocketMessage};
 use crate::config::DaemonConfig;
+use warp::http::StatusCode;
 
 pub struct WebServer {
-    config: DaemonConfig
+    version: String,
+    config: DaemonConfig,
 }
 
 impl WebServer {
-    pub(crate) fn create_server(config: DaemonConfig) -> WebServer {
+    pub(crate) fn create_server(version: String, config: DaemonConfig) -> WebServer {
         WebServer {
-            config
+            version,
+            config,
         }
     }
 
@@ -26,11 +29,30 @@ impl WebServer {
         let handler = WebSocketHandler::new(ws_outbound_tx.clone(), ws_inbound_rx, self.config.clone());
         let config = self.config.clone();
         let web_server = tokio::spawn(async move {
+            let cors = warp::cors()
+                .allow_methods(vec!["GET", "POST"])
+                .allow_origins(vec!["https://beatsaver.com", "https://scoresaber.com"]);
+
             let shutdown = warp::get()
                 .and(warp::path("shutdown"))
                 .and_then(WebServer::shutdown);
 
             let options = warp::options().map(WebServer::options);
+
+            let queue_config = config.clone();
+            let queue_map = warp::path!("queue" / "map" / String)
+                .and(warp::post())
+                .and(warp::any().map(move || queue_config.clone()))
+                .and_then(|id, config| async move {
+                    WebServer::queue_install(config, id).await
+                }).with(cors.clone());
+
+            let version = self.version.clone();
+            let version_info = warp::path!("version")
+                .and(warp::get())
+                .and(warp::any().map(move || version.clone()))
+                .map(|version| Ok(Box::new(version)))
+                .with(cors);
 
             let ws_tx = ws_outbound_tx.clone();
             let ws_inbound_tx = ws_inbound_tx.clone();
@@ -47,6 +69,8 @@ impl WebServer {
 
             warp::serve(
                 options
+                    .or(version_info)
+                    .or(queue_map)
                     .or(websocket)
                     .or(shutdown),
             )
@@ -66,6 +90,16 @@ impl WebServer {
             exit(0);
         });
         Ok(Box::new("OK"))
+    }
+
+    async fn queue_install(config: DaemonConfig, id: String) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+        match config.queue_map(id).await {
+            Ok(_) => Ok(Box::new(warp::reply::with_status("", StatusCode::NO_CONTENT))),
+            Err(err) => {
+                error!("An error occurred when trying to submit map into download queue: {}", err);
+                Ok(Box::new(warp::reply::with_status("", StatusCode::INTERNAL_SERVER_ERROR)))
+            }
+        }
     }
 
     async fn websocket_connected(websocket: warp::ws::WebSocket,
