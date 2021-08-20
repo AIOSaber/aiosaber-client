@@ -47,7 +47,7 @@ jobs:
       - name: Build
         run: cargo build --locked
         env:
-          CLIENT_VERSION: "${GITHUB_REF#refs/heads/}"
+          CLIENT_VERSION: ${{ github.base_ref }}
       - name: Create installer.zip
         run: ${{ matrix.commands }}
       - name: Provide archives for testing
