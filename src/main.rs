@@ -20,7 +20,6 @@ use crate::config::DaemonConfig;
 use curl::easy::Easy;
 use std::path::PathBuf;
 use crate::queue_handler::DownloadQueueHandler;
-use crate::installer::InstallRequestError;
 
 #[cfg(not(target_family = "windows"))]
 #[global_allocator]

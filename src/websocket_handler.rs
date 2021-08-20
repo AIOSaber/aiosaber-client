@@ -49,7 +49,8 @@ pub struct ResultMsg {
 #[serde(untagged)]
 pub enum ResultMessageData {
     Simple(String),
-    MapInstallError(String, String)
+    MapInstallError(Option<Uuid>, String, String),
+    MapInstallSuccess(Uuid, String, String)
 }
 
 impl ToString for InstallType {
