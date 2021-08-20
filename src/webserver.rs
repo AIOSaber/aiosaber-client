@@ -29,6 +29,10 @@ impl WebServer {
         let handler = WebSocketHandler::new(ws_outbound_tx.clone(), ws_inbound_rx, self.config.clone());
         let config = self.config.clone();
         let web_server = tokio::spawn(async move {
+            let cors = warp::cors()
+                .allow_methods(vec!["GET", "POST"])
+                .allow_origins(vec!["https://beatsaver.com", "http://beatsaver.com", "https://scoresaber.com"]);
+
             let shutdown = warp::get()
                 .and(warp::path("shutdown"))
                 .and_then(WebServer::shutdown);
@@ -41,13 +45,14 @@ impl WebServer {
                 .and(warp::any().map(move || queue_config.clone()))
                 .and_then(|id, config| async move {
                     WebServer::queue_install(config, id).await
-                });
+                }).with(cors.clone());
 
             let version = self.version.clone();
             let version_info = warp::path!("version")
                 .and(warp::get())
                 .and(warp::any().map(move || version.clone()))
-                .map(|version| Ok(Box::new(version)));
+                .map(|version| Ok(Box::new(version)))
+                .with(cors);
 
             let ws_tx = ws_outbound_tx.clone();
             let ws_inbound_tx = ws_inbound_tx.clone();
