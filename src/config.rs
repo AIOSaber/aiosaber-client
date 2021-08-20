@@ -9,9 +9,11 @@ use std::str::FromStr;
 use crate::installer::Installer;
 use std::env;
 use std::collections::VecDeque;
+use crate::queue_handler::{DownloadQueueRequest, InstallerQueueRequest, InstallerQueue};
 
 #[derive(Clone)]
 pub struct LocalData {
+    pub installer_queue: tokio::sync::mpsc::Sender<InstallerQueueRequest>,
     pub config: ConfigData,
     pub map_queue: VecDeque<String>,
     pub mod_queue: VecDeque<String>,
@@ -31,13 +33,24 @@ pub struct MapMeta {
 
 #[derive(Clone)]
 pub struct DaemonConfig {
+    pub concurrent_downloads: u8,
     current_configs: Arc<Mutex<Vec<LocalData>>>,
+    download_queue: tokio::sync::mpsc::Sender<DownloadQueueRequest>,
+}
+
+pub enum AuditLogAction {
+    MapInstall(String),
+    ModInstall(String),
+    MapDelete(String),
+    ModDelete(String),
 }
 
 impl DaemonConfig {
-    pub fn new() -> DaemonConfig {
+    pub fn new(download_queue: tokio::sync::mpsc::Sender<DownloadQueueRequest>) -> DaemonConfig {
         DaemonConfig {
-            current_configs: Arc::new(Mutex::new(DaemonConfig::read_from_file()))
+            concurrent_downloads: 4,
+            current_configs: Arc::new(Mutex::new(DaemonConfig::read_from_file())),
+            download_queue,
         }
     }
 
@@ -53,7 +66,7 @@ impl DaemonConfig {
                     Ok(docs) => {
                         for yaml in docs {
                             if let Ok(config) = DaemonConfig::read_yaml_doc(yaml) {
-                                vec.push(DaemonConfig::config_data_to_local_data(config));
+                                vec.push(config.into());
                             }
                         }
                     }
@@ -96,15 +109,6 @@ impl DaemonConfig {
             }
         }
         Err(())
-    }
-
-    fn config_data_to_local_data(config: ConfigData) -> LocalData {
-        LocalData {
-            config,
-            map_queue: Default::default(),
-            mod_queue: Default::default(),
-            map_index: MapIndex(Vec::new()),
-        }
     }
 
     fn write_to_file(configs: Vec<ConfigData>) {
@@ -156,13 +160,40 @@ impl DaemonConfig {
         vec
     }
 
-    pub async fn _get_data(&self) -> Vec<LocalData> {
+    pub async fn get_data(&self) -> Vec<LocalData> {
         let mutex = self.current_configs.lock().await;
         let mut vec = Vec::new();
         for local_data in mutex.iter() {
             vec.push(local_data.clone());
         }
         vec
+    }
+
+    pub async fn queue_map(&self, map: String) -> Result<(), tokio::sync::mpsc::error::SendError<DownloadQueueRequest>> {
+        self.download_queue.send(DownloadQueueRequest::Map(map)).await
+    }
+}
+
+impl LocalData {
+    pub async fn audit_log_entry(&self, _action: AuditLogAction) {
+        // todo
+    }
+}
+
+impl Into<LocalData> for ConfigData {
+    fn into(self) -> LocalData {
+        let (installer_queue_tx, installer_queue_rx) = tokio::sync::mpsc::channel(1024);
+        InstallerQueue::new(installer_queue_rx, self.clone())
+            .start(); // todo: can we catch this join handle somehow and make sure it doesnt die
+        // one a map/mod is sent into the installer queue, it is hard to track its
+        // success state programmatically:
+        LocalData {
+            installer_queue: installer_queue_tx,
+            config: self,
+            map_queue: Default::default(),
+            mod_queue: Default::default(),
+            map_index: MapIndex(Vec::new()),
+        }
     }
 }
 

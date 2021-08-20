@@ -10,9 +10,9 @@ use crate::beatsaver::{BeatSaverMap, MapVersion, BeatSaverError, BeatSaverDownlo
 use tokio::task::JoinHandle;
 use curl::easy::{Form, List};
 use std::process::Command;
-use crate::beatsaver;
-use crate::config::DaemonConfig;
 use thiserror::Error;
+use std::time::Duration;
+use crate::installer::InstallRequestError::HttpError;
 
 #[derive(Clone)]
 pub enum Installer {
@@ -44,62 +44,36 @@ pub enum InstallError {
     #[error(transparent)]
     BeatSaverRequestError(#[from] BeatSaverError),
     #[error(transparent)]
-    BeatSaverDownloadError(#[from] BeatSaverDownloadError)
+    BeatSaverDownloadError(#[from] BeatSaverDownloadError),
 }
 
-pub async fn push_to_install_queues(hash: String) -> Result<(), InstallError> {
-    match beatsaver::resolve_map_by_id(hash).await {
-        Ok(map) => {
-            match retrieve_map_data(&map).await {
-                Ok((version, data)) => {
-                    let installers: Vec<Installer> = DaemonConfig::new().into();
-                    let mut futures = Vec::new();
-                    let mut tasks = Vec::new();
-                    if installers.len() == 1 {
-                        // Yes duplicate code, to save memory expensive clones on a single installer, which should be most of the users
-                        match installers.get(0).unwrap() {
-                            Installer::PC(installer) => {
-                                installer.install_map(map, data.as_ref());
-                            }
-                            Installer::Quest(installer) => {
-                                if let Some(future) = installer.install_map(version.clone(), data.clone()) {
-                                    futures.push(future);
-                                    tasks.push((installer.clone(), version, data))
-                                }
-                            }
-                        }
-                    } else {
-                        for installer in installers {
-                            match installer {
-                                Installer::PC(installer) => {
-                                    installer.install_map(map.clone(), data.as_ref());
-                                }
-                                Installer::Quest(installer) => {
-                                    if let Some(future) = installer.install_map(version.clone(), data.clone()) {
-                                        futures.push(future);
-                                        tasks.push((installer.clone(), version.clone(), data.clone()))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    info!("Awaiting async tasks...");
-                    let results = futures_util::future::join_all(futures).await;
-                    for i in 0..results.len() {
-                        if let Ok(result) = results.get(i).unwrap() {
-                            if let Err(_err) = result {
-                                let (_installer, version, _data) = tasks.get(i).unwrap();
-                                error!("Task download errored: {}", version.hash);
-                            }
-                        }
-                    }
-                    Ok(())
-                }
-                Err(err) => Err(err.into())
+#[derive(Error, Debug)]
+pub enum InstallRequestError {
+    #[error("An error occurred when trying to post install request: {0}")]
+    HttpError(reqwest::Error),
+    #[error("WebServer responded with an error-code: {0}")]
+    HttpStatusError(u16),
+}
+
+pub async fn push_map_to_install_queues(hash: String) -> Result<(), InstallRequestError> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(5))
+        .build().unwrap();
+    let mut uri = "http://localhost:2706/queue/map/".to_owned();
+    uri.push_str(hash.as_str());
+    let install_request = client.post(uri)
+        .send().await;
+    match install_request {
+        Ok(response) => {
+            if response.status().is_success() {
+                Ok(())
+            } else {
+                Err(InstallRequestError::HttpStatusError(response.status().as_u16()))
             }
         }
         Err(err) => {
-            Err(err.into())
+            Err(HttpError(err))
         }
     }
 }
@@ -134,6 +108,7 @@ impl PcInstaller {
 }
 
 impl QuestInstaller {
+    // todo: error types
     pub fn install_map(&self, version: MapVersion, data: Vec<u8>) -> Option<JoinHandle<Result<(), String>>> {
         let mut full_name = "custom_level_".to_owned();
         full_name.push_str(version.clone().hash.as_str());
@@ -284,17 +259,6 @@ fn unzip_to<R: Read + Seek>(mut archive: ZipArchive<R>, target: PathBuf) {
             let mut outfile = fs::File::create(&outpath).unwrap();
             io::copy(&mut file, &mut outfile).unwrap();
         }
-    }
-}
-
-pub(crate) async fn retrieve_map_data(map: &BeatSaverMap) -> Result<(MapVersion, Vec<u8>), BeatSaverDownloadError> {
-    if let Some(version) = beatsaver::find_latest_version(map) {
-        info!("Downloading map with hash {}", version.hash.as_str());
-        beatsaver::download_zip(&version).await
-            .map(|data| (version, data))
-            .map_err(|err| err.into())
-    } else {
-        Err(BeatSaverDownloadError::NoMapVersion(map.id.clone()))
     }
 }
 

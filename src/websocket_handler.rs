@@ -40,9 +40,16 @@ pub enum InstallType {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct ResultMsg {
-    action: String,
-    success: bool,
-    msg: String,
+    pub(crate) action: String,
+    pub(crate) success: bool,
+    pub(crate) data: ResultMessageData,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum ResultMessageData {
+    Simple(String),
+    MapInstallError(String, String)
 }
 
 impl ToString for InstallType {
@@ -135,28 +142,28 @@ impl WebSocketHandler {
                 Some(WebSocketMessage::ResultResponse(ResultMsg {
                     action,
                     success,
-                    msg,
+                    data: ResultMessageData::Simple(msg),
                 }))
             }
             WebSocketMessage::InstallMaps(_maps) => {
                 Some(WebSocketMessage::ResultResponse(ResultMsg {
                     action,
                     success: false,
-                    msg: "Not implemented".to_string(),
+                    data: ResultMessageData::Simple("Not implemented".to_string()),
                 }))
             }
             WebSocketMessage::InstallPcMods(_mods) => {
                 Some(WebSocketMessage::ResultResponse(ResultMsg {
                     action,
                     success: false,
-                    msg: "Not implemented".to_string(),
+                    data: ResultMessageData::Simple("Not implemented".to_string()),
                 }))
             }
             WebSocketMessage::InstallQuestMods(_mods) => {
                 Some(WebSocketMessage::ResultResponse(ResultMsg {
                     action,
                     success: false,
-                    msg: "Not implemented".to_string(),
+                    data: ResultMessageData::Simple("Not implemented".to_string()),
                 }))
             }
             _ => {

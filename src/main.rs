@@ -5,6 +5,7 @@ mod config;
 mod beatsaver;
 mod installer;
 mod map_index;
+mod queue_handler;
 
 #[cfg(not(target_family = "windows"))]
 use jemallocator::Jemalloc;
@@ -18,6 +19,8 @@ use std::env;
 use crate::config::DaemonConfig;
 use curl::easy::Easy;
 use std::path::PathBuf;
+use crate::queue_handler::DownloadQueueHandler;
+use crate::installer::InstallRequestError;
 
 #[cfg(not(target_family = "windows"))]
 #[global_allocator]
@@ -69,7 +72,7 @@ async fn main() {
                 let mut dup = false;
                 for (hash, path) in data {
                     let dup_path = found.clone().into_iter()
-                        .find_map(| entry: (String, PathBuf) | {
+                        .find_map(|entry: (String, PathBuf)| {
                             if entry.0.eq(&hash) {
                                 Some(entry.1)
                             } else {
@@ -90,7 +93,7 @@ async fn main() {
                 let err = results.into_iter()
                     .filter_map(|result| result.err())
                     .collect::<Vec<map_index::IndexError>>();
-                info!("Total: {} - OK: {} - Failure: {}", size, size-err.len(), err.len());
+                info!("Total: {} - OK: {} - Failure: {}", size, size - err.len(), err.len());
                 err.into_iter()
                     .for_each(|err| error!("{}", err));
             }
@@ -139,8 +142,14 @@ async fn main() {
                 if hash.ends_with("/") {
                     hash.remove(hash.len() - 1);
                 }
-                info!("Installing map {}", hash.as_str());
-                installer::push_to_install_queues(hash).await.ok();
+                info!("Adding map {} to install queue...", hash.as_str());
+                match installer::push_map_to_install_queues(hash).await {
+                    Ok(_) => info!("Success!"),
+                    Err(err) => {
+                        error!("Failure: {}", err);
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                    }
+                }
             }
             return;
         }
@@ -162,12 +171,13 @@ async fn main() {
         build_time
     );
 
-
-    let config = DaemonConfig::new();
-    let (web_server, socket_handler) = WebServer::create_server(config).start(
+    let (queue_handler_tx, queue_handler_rx) = tokio::sync::mpsc::channel(1024);
+    let config = DaemonConfig::new(queue_handler_tx);
+    let (web_server, socket_handler) = WebServer::create_server(config.clone()).start(
         SocketAddr::new(IpAddr::from_str("127.0.0.1").unwrap(), 2706));
-    let _websocket_sender = socket_handler.get_sender();
+    let websocket_sender = socket_handler.get_sender();
     let websocket_handle = socket_handler.start();
+    let queue_handle = DownloadQueueHandler::new(queue_handler_rx, config, websocket_sender).start();
 
     tokio::select! {
         _val = web_server => {
@@ -176,6 +186,10 @@ async fn main() {
         }
         _val = websocket_handle => {
             warn!("WebSocket Handler died. Restarting!");
+            exit(1);
+        }
+        _val = queue_handle => {
+            warn!("Download Queue Handler died. Restarting!");
             exit(1);
         }
     }

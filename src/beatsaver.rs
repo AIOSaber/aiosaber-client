@@ -1,6 +1,7 @@
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
+use log::info;
 use thiserror::Error;
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -54,6 +55,17 @@ pub enum BeatSaverDownloadError {
     BeatSaverError(#[from] BeatSaverError),
     #[error("Map {0} seems to have no versions")]
     NoMapVersion(String),
+}
+
+pub(crate) async fn retrieve_map_data(map: &BeatSaverMap) -> Result<(MapVersion, Vec<u8>), BeatSaverDownloadError> {
+    if let Some(version) = find_latest_version(map) {
+        info!("Downloading map with hash {}", version.hash.as_str());
+        download_zip(&version).await
+            .map(|data| (version, data))
+            .map_err(|err| err.into())
+    } else {
+        Err(BeatSaverDownloadError::NoMapVersion(map.id.clone()))
+    }
 }
 
 pub fn find_latest_version(map: &BeatSaverMap) -> Option<MapVersion> {
