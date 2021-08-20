@@ -170,10 +170,12 @@ async fn main() {
         build_time
     );
 
+    let version = env!("CLIENT_VERSION").to_string();
+
     let (queue_handler_tx, queue_handler_rx) = tokio::sync::mpsc::channel(1024);
     let config = DaemonConfig::new(queue_handler_tx);
-    let (web_server, socket_handler) = WebServer::create_server(config.clone()).start(
-        SocketAddr::new(IpAddr::from_str("127.0.0.1").unwrap(), 2706));
+    let (web_server, socket_handler) = WebServer::create_server(version, config.clone())
+        .start(SocketAddr::new(IpAddr::from_str("127.0.0.1").unwrap(), 2706));
     let websocket_sender = socket_handler.get_sender();
     let websocket_handle = socket_handler.start();
     let queue_handle = DownloadQueueHandler::new(queue_handler_rx, config, websocket_sender).start();

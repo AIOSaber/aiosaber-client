@@ -46,6 +46,8 @@ jobs:
           submodules: recursive
       - name: Build
         run: cargo build --release --locked
+        env:
+          CLIENT_VERSION: ${GITHUB_REF##*/}
       - name: Create installer.zip
         run: ${{ matrix.commands }}
       - name: Upload binaries to release

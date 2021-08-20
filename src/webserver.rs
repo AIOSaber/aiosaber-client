@@ -10,13 +10,15 @@ use crate::config::DaemonConfig;
 use warp::http::StatusCode;
 
 pub struct WebServer {
-    config: DaemonConfig
+    version: String,
+    config: DaemonConfig,
 }
 
 impl WebServer {
-    pub(crate) fn create_server(config: DaemonConfig) -> WebServer {
+    pub(crate) fn create_server(version: String, config: DaemonConfig) -> WebServer {
         WebServer {
-            config
+            version,
+            config,
         }
     }
 
@@ -41,6 +43,12 @@ impl WebServer {
                     WebServer::queue_install(config, id).await
                 });
 
+            let version = self.version.clone();
+            let version_info = warp::path!("version")
+                .and(warp::get())
+                .and(warp::any().map(move || version.clone()))
+                .map(|version| Ok(Box::new(version)));
+
             let ws_tx = ws_outbound_tx.clone();
             let ws_inbound_tx = ws_inbound_tx.clone();
             let config = config.clone();
@@ -56,6 +64,7 @@ impl WebServer {
 
             warp::serve(
                 options
+                    .or(version_info)
                     .or(queue_map)
                     .or(websocket)
                     .or(shutdown),
