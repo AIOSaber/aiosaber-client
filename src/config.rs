@@ -137,7 +137,6 @@ impl DaemonConfig {
 
     pub async fn replace_configs(&self, configs: Vec<ConfigData>) -> Vec<ConfigData> {
         let mut mutex = self.current_configs.lock().await;
-        mutex.clear();
         for config_data in configs {
             mutex.iter_mut().for_each(|local_data| {
                 if local_data.config.id.eq(&config_data.id) {
