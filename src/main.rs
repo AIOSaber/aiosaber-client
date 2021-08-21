@@ -6,6 +6,7 @@ mod beatsaver;
 mod installer;
 mod map_index;
 mod queue_handler;
+mod file_watcher;
 
 #[cfg(not(target_family = "windows"))]
 use jemallocator::Jemalloc;
@@ -27,12 +28,22 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init_from_env(Env::new().default_filter_or("info"));
+    env_logger::init_from_env(Env::new().default_filter_or("debug"));
 
     env::set_current_dir(env::current_exe().unwrap().parent().unwrap()).ok();
 
     if env::args().len() > 1 {
         let operator: String = env::args().nth(1).unwrap();
+
+        if operator.eq("--watcher") {
+            let (tx, _) = tokio::sync::mpsc::channel(1);
+            for data in DaemonConfig::new(tx).get_data().await {
+                if data.config.install_type == crate::websocket_handler::InstallType::PC {
+                    crate::file_watcher::PcMapsWatcher::new(data).start_watcher().unwrap().await.ok();
+                }
+            }
+            return;
+        }
 
         if operator.eq("--test-hash") {
             if env::args().len() != 3 {

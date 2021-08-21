@@ -93,12 +93,22 @@ impl WebServer {
     }
 
     async fn queue_install(config: DaemonConfig, id: String) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
-        match config.queue_map(id).await {
-            Ok(_) => Ok(Box::new(warp::reply::with_status("", StatusCode::NO_CONTENT))),
-            Err(err) => {
-                error!("An error occurred when trying to submit map into download queue: {}", err);
-                Ok(Box::new(warp::reply::with_status("", StatusCode::INTERNAL_SERVER_ERROR)))
+        let mut needs_download = false;
+        for local_data in config.get_data().await.iter() {
+            let installed = local_data.is_map_installed_by_id(id.as_str()).await;
+            if !installed { needs_download = true }
+        }
+
+        if needs_download {
+            match config.queue_map(id).await {
+                Ok(_) => Ok(Box::new(warp::reply::with_status("", StatusCode::NO_CONTENT))),
+                Err(err) => {
+                    error!("An error occurred when trying to submit map into download queue: {}", err);
+                    Ok(Box::new(warp::reply::with_status("", StatusCode::INTERNAL_SERVER_ERROR)))
+                }
             }
+        } else {
+            Ok(Box::new(warp::reply::with_status("Map already installed on all configured devices", StatusCode::CONFLICT)))
         }
     }
 

@@ -34,7 +34,6 @@ pub struct MapVersion {
     pub hash: String,
     pub state: String,
     pub created_at: DateTime<Utc>,
-    pub sage_score: u8,
     #[serde(alias = "downloadURL")] // thanks for a super odd name
     pub download_url: String,
 }
