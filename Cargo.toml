@@ -23,6 +23,7 @@ curl = "0.4.38"
 thiserror = "1.0.26"
 sha1 = { version = "0.6.0", features = ["std"] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
+notify = "4.0.17"
 
 [target.'cfg(target_family = "windows")'.dependencies]
 powershell_script = "0.2.1"

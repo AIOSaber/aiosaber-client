@@ -1,4 +1,4 @@
-use crate::config::DaemonConfig;
+use crate::config::{DaemonConfig, LocalData};
 use tokio::sync::mpsc::Receiver;
 use tokio::task::JoinHandle;
 use tokio::sync::Semaphore;
@@ -56,6 +56,9 @@ impl DownloadQueueHandler {
                                 success: false,
                                 data: ResultMessageData::MapInstallError(Some(config.id), map.id, error.to_string()),
                             }))
+                        }
+                        InstallerQueueResult::AlreadyInstalled(map, version) => {
+                            info!("Map {} ({}) was already installed... Skipping", map.id, version.hash);
                         }
                     }
                 }
@@ -173,12 +176,14 @@ pub enum InstallerQueueData {
 
 pub struct InstallerQueue {
     receiver: Receiver<InstallerQueueRequest>,
+    config: LocalData,
     installer: Installer,
 }
 
 pub enum InstallerQueueResult {
     Success(BeatSaverMap, MapVersion),
     Error(BeatSaverMap, MapVersion, InstallerQueueError),
+    AlreadyInstalled(BeatSaverMap, MapVersion)
 }
 
 #[derive(Error, Debug)]
@@ -190,15 +195,22 @@ pub enum InstallerQueueError {
 }
 
 impl InstallerQueue {
-    pub fn new(receiver: Receiver<InstallerQueueRequest>, config: ConfigData) -> InstallerQueue {
+    pub fn new(receiver: Receiver<InstallerQueueRequest>, config: LocalData) -> InstallerQueue {
         InstallerQueue {
             receiver,
-            installer: Installer::from(config),
+            installer: Installer::from(config.config.clone()),
+            config,
         }
     }
 
     async fn install_map(&self, map: BeatSaverMap, version: MapVersion, data: Vec<u8>,
                          response: tokio::sync::oneshot::Sender<InstallerQueueResult>) {
+        if self.config.map_index.lock().await
+            .iter()
+            .any(|map_data| map_data.has_hash(version.hash.as_str())) {
+            response.send(InstallerQueueResult::AlreadyInstalled(map, version)).ok();
+            return;
+        }
         match self.installer.clone() {
             Installer::PC(pc) => {
                 pc.install_map(map.clone(), data.as_ref());

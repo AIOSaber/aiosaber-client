@@ -129,7 +129,7 @@ impl WebSocketHandler {
         match message {
             WebSocketMessage::UpdateConfig(configs) => {
                 info!("Updating configs...");
-                let updated = self.config.replace_configs(configs).await;
+                let updated = self.config.update_configs(configs).await;
                 Some(WebSocketMessage::Connected(updated))
             }
             WebSocketMessage::SetupOneClick() => {
