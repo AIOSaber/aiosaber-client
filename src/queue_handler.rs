@@ -190,8 +190,8 @@ pub enum InstallerQueueResult {
 pub enum InstallerQueueError {
     #[error("Failed to join async install task {0}")]
     JoinError(tokio::task::JoinError),
-    #[error("Exceeded the maximum amount of retries")]
-    TriesExceeded(),
+    #[error("Exceeded the maximum amount of retries. Last error: {0}")]
+    TriesExceeded(String),
 }
 
 impl InstallerQueue {
@@ -221,34 +221,43 @@ impl InstallerQueue {
             }
             Installer::Quest(quest) => {
                 let mut join_error = None;
+                let mut latest_error = None;
                 let mut success = false;
                 for _ in 0..10 {
-                    if let Some(handle) = quest.install_map(version.clone(), data.clone()) {
-                        match handle.await {
-                            Ok(result) => {
-                                match result {
-                                    Ok(_) => {
-                                        info!("Quest install task succeeded!");
-                                        success = true;
-                                        break;
+                    match quest.install_map(version.clone(), data.clone()) {
+                        Ok(eventual_handle) => {
+                            if let Some(handle) = eventual_handle {
+                                match handle.await {
+                                    Ok(result) => {
+                                        match result {
+                                            Ok(_) => {
+                                                info!("Quest install task succeeded!");
+                                                success = true;
+                                                break;
+                                            }
+                                            Err(err) => {
+                                                error!("Task for quest installer failed: {}", err);
+                                                error!("Backing off for 1 minute");
+                                                tokio::time::sleep(std::time::Duration::from_secs(60)).await
+                                            }
+                                        }
                                     }
                                     Err(err) => {
-                                        error!("Task for quest installer failed: {}", err);
-                                        error!("Backing off for 1 minute");
-                                        tokio::time::sleep(std::time::Duration::from_secs(60)).await
+                                        error!("Cannot join quest install task: {}", err);
+                                        join_error = Some(err);
+                                        break;
                                     }
                                 }
-                            }
-                            Err(err) => {
-                                error!("Cannot join quest install task: {}", err);
-                                join_error = Some(err);
+                            } else {
+                                info!("Quest install task succeeded!");
+                                success = true;
                                 break;
                             }
                         }
-                    } else {
-                        info!("Quest install task succeeded!");
-                        success = true;
-                        break;
+                        Err(error) => {
+                            error!("An error occured: {}", error);
+                            latest_error = Some(error);
+                        }
                     }
                 }
                 if success {
@@ -258,8 +267,8 @@ impl InstallerQueue {
                 } else {
                     let error = if let Some(err) = join_error {
                         InstallerQueueError::JoinError(err)
-                    } else {
-                        InstallerQueueError::TriesExceeded()
+                    } else if let Some(err) = latest_error {
+                        InstallerQueueError::TriesExceeded(err)
                     };
                     if response.send(InstallerQueueResult::Error(map, version, error)).is_err() {
                         error!("Error when sending result");
