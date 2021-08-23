@@ -28,7 +28,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 #[tokio::main]
 async fn main() {
-    env_logger::init_from_env(Env::new().default_filter_or("debug"));
+    env_logger::init_from_env(Env::new().default_filter_or("info"));
 
     env::set_current_dir(env::current_exe().unwrap().parent().unwrap()).ok();
 

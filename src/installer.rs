@@ -109,7 +109,7 @@ impl PcInstaller {
 
 impl QuestInstaller {
     // todo: error types
-    pub fn install_map(&self, version: MapVersion, data: Vec<u8>) -> Option<JoinHandle<Result<(), String>>> {
+    pub fn install_map(&self, version: MapVersion, data: Vec<u8>) -> Result<Option<JoinHandle<Result<(), String>>>, String> {
         let mut full_name = "custom_level_".to_owned();
         full_name.push_str(version.clone().hash.as_str());
 
@@ -135,10 +135,10 @@ impl QuestInstaller {
                 ]) {
                     Ok(_) => info!("adb: Connected via network"),
                     Err(err) => {
-                        if let Some(err) = err {
-                            error!("Couldn't start adb (is it installed / in path?): {}", err);
+                        return if let Some(err) = err {
+                            Err(format!("Couldn't start adb (is it installed / in path?): {}", err))
                         } else {
-                            error!("adb: Couldn't connect to device");
+                            Err("adb: Couldn't connect to device".to_owned())
                         }
                     }
                 }
@@ -154,10 +154,10 @@ impl QuestInstaller {
             ]) {
                 Ok(_) => info!("adb: Created folder"),
                 Err(err) => {
-                    if let Some(err) = err {
-                        error!("Couldn't start adb (is it installed / in path?): {}", err);
+                    return if let Some(err) = err {
+                        Err(format!("Couldn't start adb (is it installed / in path?): {}", err))
                     } else {
-                        error!("adb: Couldn't create folder");
+                        Err("adb: Couldn't connect to device".to_owned())
                     }
                 }
             }
@@ -170,14 +170,14 @@ impl QuestInstaller {
             ]) {
                 Ok(_) => info!("adb: Copied files"),
                 Err(err) => {
-                    if let Some(err) = err {
-                        error!("Couldn't start adb (is it installed / in path?): {}", err);
+                    return if let Some(err) = err {
+                        Err(format!("Couldn't start adb (is it installed / in path?): {}", err))
                     } else {
-                        error!("adb: Couldn't copy files");
+                        Err("adb: Couldn't connect to device".to_owned())
                     }
                 }
             }
-            None
+            Ok(None)
         } else {
             let mut bmbf_host = self.config.install_location.clone();
             info!("Uploading map to BMBF @ {}", bmbf_host.as_str());
@@ -187,7 +187,7 @@ impl QuestInstaller {
             let mut referer_header = "Referer: ".to_owned();
             referer_header.push_str(bmbf_referer.as_str());
             let data = data.clone();
-            Some(tokio::spawn(async move {
+            Ok(Some(tokio::spawn(async move {
                 let mut curl = curl::easy::Easy::new();
                 curl.url(bmbf_host.as_str()).unwrap();
                 curl.post(true).unwrap();
@@ -217,7 +217,7 @@ impl QuestInstaller {
                         Err("Request error".to_owned())
                     }
                 }
-            }))
+            })))
         }
     }
 }
