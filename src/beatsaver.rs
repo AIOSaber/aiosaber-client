@@ -76,7 +76,7 @@ pub fn find_latest_version(map: &BeatSaverMap) -> Option<MapVersion> {
 pub async fn download_zip(version: &MapVersion) -> Result<Vec<u8>, BeatSaverError> {
     let client = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(600))
         .build().unwrap();
     let download_url = version.download_url.clone();
     let result = client.get(download_url.clone())
