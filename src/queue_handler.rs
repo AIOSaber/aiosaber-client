@@ -245,6 +245,10 @@ impl InstallerQueue {
                                 break;
                             }
                         }
+                    } else {
+                        info!("Quest install task succeeded!");
+                        success = true;
+                        break;
                     }
                 }
                 if success {
