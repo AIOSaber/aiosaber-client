@@ -187,7 +187,7 @@ impl QuestInstaller {
             let mut referer_header = "Referer: ".to_owned();
             referer_header.push_str(bmbf_referer.as_str());
             let data = data.clone();
-            Some(tokio::spawn(async move {
+            Ok(Some(tokio::spawn(async move {
                 let mut curl = curl::easy::Easy::new();
                 curl.url(bmbf_host.as_str()).unwrap();
                 curl.post(true).unwrap();
@@ -217,7 +217,7 @@ impl QuestInstaller {
                         Err("Request error".to_owned())
                     }
                 }
-            }))
+            })))
         }
     }
 }

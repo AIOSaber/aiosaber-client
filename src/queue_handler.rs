@@ -269,6 +269,8 @@ impl InstallerQueue {
                         InstallerQueueError::JoinError(err)
                     } else if let Some(err) = latest_error {
                         InstallerQueueError::TriesExceeded(err)
+                    } else {
+                        InstallerQueueError::TriesExceeded("Unknown".to_owned())
                     };
                     if response.send(InstallerQueueResult::Error(map, version, error)).is_err() {
                         error!("Error when sending result");
