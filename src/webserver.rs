@@ -37,7 +37,8 @@ impl WebServer {
                 .and(warp::path("shutdown"))
                 .and_then(WebServer::shutdown);
 
-            let options = warp::options().map(WebServer::options);
+            let options = warp::options().map(WebServer::options)
+                .with(cors.clone());
 
             let queue_config = config.clone();
             let queue_map = warp::path!("queue" / "map" / String)
@@ -52,7 +53,7 @@ impl WebServer {
                 .and(warp::get())
                 .and(warp::any().map(move || version.clone()))
                 .map(|version| Ok(Box::new(version)))
-                .with(cors);
+                .with(cors.clone());
 
             let ws_tx = ws_outbound_tx.clone();
             let ws_inbound_tx = ws_inbound_tx.clone();
@@ -65,7 +66,7 @@ impl WebServer {
                 .map(|ws: warp::ws::Ws, tx, inbound_tx, config| {
                     trace!("WebSocket connection created!");
                     ws.on_upgrade(move |websocket| WebServer::websocket_connected(websocket, tx, inbound_tx, config))
-                });
+                }).with(cors);
 
             warp::serve(
                 options
