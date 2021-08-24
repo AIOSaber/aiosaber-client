@@ -101,15 +101,27 @@ pub async fn download_zip(version: &MapVersion) -> Result<Vec<u8>, BeatSaverErro
     }
 }
 
-pub async fn resolve_map_by_id(id: String) -> Result<BeatSaverMap, BeatSaverError> {
-    let mut url = "https://beatsaver.com/api/maps/id/".to_string();
-    url.push_str(id.as_str());
+pub fn get_beatsaver_base_url() -> String {
+    let mut api_url = option_env!("BEATSAVER_API_URL")
+        .unwrap_or("https://beatsaver.com/api/")
+        .to_owned();
+    if !api_url.ends_with("/") {
+        api_url.push_str("/");
+    }
+    api_url
+}
+
+pub async fn resolve_map_by_id(id: &str) -> Result<BeatSaverMap, BeatSaverError> {
+    let mut url = get_beatsaver_base_url();
+    url.push_str("maps/id/");
+    url.push_str(id);
     execute_beatsaver_map_request(url).await
 }
 
-pub async fn resolve_map_by_hash(hash: String) -> Result<BeatSaverMap, BeatSaverError> {
-    let mut url = "https://beatsaver.com/api/maps/hash/".to_string();
-    url.push_str(hash.as_str());
+pub async fn resolve_map_by_hash(hash: &str) -> Result<BeatSaverMap, BeatSaverError> {
+    let mut url = get_beatsaver_base_url();
+    url.push_str("maps/id/");
+    url.push_str(hash);
     execute_beatsaver_map_request(url).await
 }
 

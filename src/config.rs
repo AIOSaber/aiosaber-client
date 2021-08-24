@@ -261,7 +261,7 @@ impl LocalData {
                         for result in vec {
                             let error = match result {
                                 Ok((path, hash)) => {
-                                    match crate::beatsaver::resolve_map_by_hash(hash.clone()).await {
+                                    match crate::beatsaver::resolve_map_by_hash(hash.as_str()).await {
                                         Ok(data) => {
                                             map_index.push(MapData::Valid(MapMetadata {
                                                 path,

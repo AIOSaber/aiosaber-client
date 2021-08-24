@@ -33,7 +33,7 @@ impl PcMapsWatcher {
     async fn handle_created(&self, config: LocalData, path: PathBuf) {
         match map_index::generate_hash(path.clone()) {
             Ok(hash) => {
-                match beatsaver::resolve_map_by_hash(hash.clone()).await {
+                match beatsaver::resolve_map_by_hash(hash.as_str()).await {
                     Ok(map) => {
                         let mut mutex = config.map_index.lock().await;
                         mutex.push(MapData::Valid(MapMetadata {
@@ -43,14 +43,14 @@ impl PcMapsWatcher {
                         }));
                     }
                     Err(err) => {
-                        warn!("Map seems to be not a beatsaver map {}: {}", path.display(), err);
+                        warn!("Map seems to be not a beatsaver map {}: {:?}", path.display(), err);
                         let mut mutex = config.map_index.lock().await;
                         mutex.push(MapData::Unknown(path, hash));
                     }
                 }
             }
             Err(err) => {
-                warn!("watcher: An indexing error occurred in {}: {}", path.display(), err);
+                warn!("watcher: An indexing error occurred in {}: {:?}", path.display(), err);
                 let mut mutex = config.map_index.lock().await;
                 mutex.push(MapData::Invalid(path));
             }

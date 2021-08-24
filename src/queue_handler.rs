@@ -70,7 +70,7 @@ impl DownloadQueueHandler {
     }
 
     async fn download_map(config: DownloadQueueHandlerConfiguration, id: String) {
-        match beatsaver::resolve_map_by_id(id.clone()).await {
+        match beatsaver::resolve_map_by_id(id.as_str()).await {
             Ok(map) => {
                 match beatsaver::retrieve_map_data(&map).await {
                     Ok((version, data)) => {
@@ -105,7 +105,7 @@ impl DownloadQueueHandler {
                         }
                     }
                     Err(error) => {
-                        error!("BeatSaverDownloadError: {}", error);
+                        error!("BeatSaverDownloadError: {:?}", error);
                         WebSocketHandler::send_static(config.websocket.clone(), WebSocketMessage::ResultResponse(ResultMsg {
                             action: "InstallMaps".to_string(),
                             success: false,
@@ -115,7 +115,7 @@ impl DownloadQueueHandler {
                 }
             }
             Err(error) => {
-                error!("BeatSaverError: {}", error);
+                error!("BeatSaverError: {:?}", error);
                 WebSocketHandler::send_static(config.websocket.clone(), WebSocketMessage::ResultResponse(ResultMsg {
                     action: "InstallMaps".to_string(),
                     success: false,

@@ -55,7 +55,7 @@ async fn main() {
                     std::path::PathBuf::from_str(dir.as_str()).expect("Path is not a dir")
                 ).expect("Invalid directory");
                 info!("Hash is: {}", calculated_hash.as_str());
-                let map = beatsaver::resolve_map_by_hash(calculated_hash.clone()).await.expect("Map not found!");
+                let map = beatsaver::resolve_map_by_hash(calculated_hash.as_str()).await.expect("Map not found!");
                 info!("BeatSaver Map is: {} ({} - {})", map.id, map.metadata.song_name, map.metadata.level_author_name);
             }
             return;
@@ -105,7 +105,7 @@ async fn main() {
                     .collect::<Vec<map_index::IndexError>>();
                 info!("Total: {} - OK: {} - Failure: {}", size, size - err.len(), err.len());
                 err.into_iter()
-                    .for_each(|err| error!("{}", err));
+                    .for_each(|err| error!("{:?}", err));
             }
             return;
         }
@@ -156,7 +156,7 @@ async fn main() {
                 match installer::push_map_to_install_queues(hash).await {
                     Ok(_) => info!("Success!"),
                     Err(err) => {
-                        error!("Failure: {}", err);
+                        error!("Failure: {:?}", err);
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     }
                 }
