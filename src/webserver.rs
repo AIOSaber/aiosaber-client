@@ -142,6 +142,7 @@ impl WebServer {
         while let Some(result) = ws_rx.next().await {
             match result {
                 Ok(msg) => {
+                    let mut breakout = false;
                     if msg.is_text() {
                         debug!("Received text message: {}", msg.to_str().unwrap());
                     }
@@ -153,9 +154,10 @@ impl WebServer {
                     }
                     if msg.is_close() {
                         info!("WebSocket closed gracefully");
+                        breakout = true;
                     }
                     inbound_tx.send(msg).await.ok();
-                    if msg.is_close() {
+                    if breakout {
                         break;
                     }
                 }
