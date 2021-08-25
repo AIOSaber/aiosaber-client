@@ -155,9 +155,13 @@ impl WebServer {
                         info!("WebSocket closed gracefully");
                     }
                     inbound_tx.send(msg).await.ok();
+                    if msg.is_close() {
+                        break;
+                    }
                 }
                 Err(e) => {
                     warn!("WebSocket disconnected due to error: {}", e);
+                    break;
                 }
             }
         }

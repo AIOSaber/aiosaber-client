@@ -65,6 +65,7 @@ impl DaemonConfig {
     }
 
     fn read_from_file() -> HashMap<Uuid, LocalData> {
+        debug!("Reading config from file...");
         let mut path = env::current_dir().unwrap().clone();
         path.push("daemon-config.yaml");
         let mut vec = Vec::new();
@@ -162,6 +163,7 @@ impl DaemonConfig {
     }
 
     fn read_map_index_from_file(id: &Uuid) -> Option<MapIndex> {
+        debug!("Reading map index from file...");
         let mut path = env::current_dir().unwrap().clone();
         let mut file_name = "map-index-".to_string();
         file_name.push_str(id.to_string().as_str());
@@ -179,6 +181,7 @@ impl DaemonConfig {
     }
 
     fn write_map_index_to_file(id: &Uuid, index: &MapIndex) {
+        debug!("Writing map index to file...");
         let value = serde_json::to_vec(index).expect("Failed to parse MapIndex");
         let mut path = env::current_dir().unwrap().clone();
         let mut file_name = "map-index-".to_string();
