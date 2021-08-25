@@ -158,6 +158,7 @@ impl WebServer {
                 }
                 Err(e) => {
                     warn!("WebSocket disconnected due to error: {}", e);
+                    break;
                 }
             }
         }
