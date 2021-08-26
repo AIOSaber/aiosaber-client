@@ -12,7 +12,7 @@ use crate::queue_handler::{DownloadQueueRequest, InstallerQueueRequest, Installe
 use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 use crate::map_index::IndexError;
-use crate::beatsaver::BeatSaverError;
+use crate::beatsaver::{BeatSaverError, BeatSaverMap};
 use uuid::Uuid;
 use std::collections::HashMap;
 use crate::file_watcher::PcMapsWatcher;
@@ -49,9 +49,9 @@ pub struct DaemonConfig {
 }
 
 pub enum AuditLogAction {
-    MapInstall(String),
+    MapInstall(BeatSaverMap),
     ModInstall(String),
-    MapDelete(String),
+    MapDelete(u32, String),
     ModDelete(String),
 }
 
@@ -406,6 +406,15 @@ impl MapData {
         match self {
             MapData::Valid(map) => map.id.eq(&u32::from_str_radix(id, 16).unwrap_or_default()),
             _ => false
+        }
+    }
+}
+
+impl Into<Option<MapMetadata>> for MapData {
+    fn into(self) -> Option<MapMetadata> {
+        match self {
+            MapData::Valid(meta) => Some(meta),
+            _ => None
         }
     }
 }

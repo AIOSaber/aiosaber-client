@@ -1,4 +1,4 @@
-use crate::config::{LocalData, MapData, MapMetadata};
+use crate::config::{LocalData, MapData, MapMetadata, AuditLogAction};
 use log::{debug, info, warn, error};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, DebouncedEvent};
 use tokio::task::JoinHandle;
@@ -41,6 +41,7 @@ impl PcMapsWatcher {
                             hash,
                             id: u32::from_str_radix(map.id.as_str(), 16).expect("Map id is not hex, wtf?"),
                         }));
+                        config.audit_log_entry(AuditLogAction::MapInstall(map)).await;
                     }
                     Err(err) => {
                         warn!("Map seems to be not a beatsaver map {}: {:?}", path.display(), err);
@@ -60,9 +61,15 @@ impl PcMapsWatcher {
 
     async fn handle_removed(&self, config: LocalData, path: PathBuf) {
         let mut mutex = config.map_index.lock().await;
+        let meta: Option<MapMetadata> = mutex.iter()
+            .filter_map(|map| map.into())
+            .nth(0);
         mutex.retain(|entry| entry.as_ref().ne(&path));
         std::mem::drop(mutex);
         config.rewrite_map_index().await;
+        if let Some(meta) = meta {
+            config.audit_log_entry(AuditLogAction::MapDelete(meta.id, meta.hash)).await;
+        }
     }
 
     async fn handle_renamed(&self, config: LocalData, old: PathBuf, new: PathBuf) {
