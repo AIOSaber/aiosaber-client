@@ -118,12 +118,12 @@ impl PcInstaller {
         }
     }
 
-    pub fn install_mod_dll(&self, name: String, data: &[u8]) {
+    pub fn install_mod_dll(&self, name: String, data: &[u8]) -> io::Result<()> {
         let target = self.config.install_location.clone();
         let mut target = PathBuf::from(target);
         target.push("Plugins");
         target.push(name);
-        fs::write(target.as_path(), data).unwrap()
+        fs::write(target.as_path(), data)
     }
 }
 

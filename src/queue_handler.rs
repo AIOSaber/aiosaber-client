@@ -352,7 +352,7 @@ impl InstallerQueue {
         match &self.installer {
             Installer::PC(installer) => {
                 match mod_data.data {
-                    WebSocketPcModType::DLL(name) => installer.install_mod_dll(name, file_content.as_ref()),
+                    WebSocketPcModType::DLL(name) => installer.install_mod_dll(name, file_content.as_ref()).ok(), // todo ok()?
                     WebSocketPcModType::ZIP(path) => installer.install_mod_zip(path, file_content.as_ref()),
                 }
                 response.send(InstallerQueueResult::ModSuccess(mod_data.common.identifier)).ok();
