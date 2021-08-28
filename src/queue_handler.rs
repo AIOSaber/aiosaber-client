@@ -281,7 +281,7 @@ impl InstallerQueue {
         }
         match self.installer.clone() {
             Installer::PC(pc) => {
-                pc.install_map(map.clone(), data.as_ref());
+                pc.install_map(map.clone(), data.as_ref()).ok(); // todo Ok?
                 info!("PC install task succeeded!");
                 if response.send(InstallerQueueResult::MapSuccess(map, version)).is_err() {
                     error!("Error when sending result");
@@ -351,13 +351,16 @@ impl InstallerQueue {
     async fn install_mod(&self, mod_data: WebSocketPcModData, file_content: Vec<u8>, response: tokio::sync::oneshot::Sender<InstallerQueueResult>) {
         match &self.installer {
             Installer::PC(installer) => {
-                match mod_data.data {
-                    WebSocketPcModType::DLL(name) => installer.install_mod_dll(name, file_content.as_ref()).ok(), // todo ok()?
+                let result = match mod_data.data {
+                    WebSocketPcModType::DLL(name) => installer.install_mod_dll(name, file_content.as_ref()),
                     WebSocketPcModType::ZIP(path) => installer.install_mod_zip(path, file_content.as_ref()),
-                }
+                };
+                result.ok(); // todo: Ok?
                 response.send(InstallerQueueResult::ModSuccess(mod_data.common.identifier)).ok();
             }
-            Installer::Quest(_installer) => {}
+            Installer::Quest(_installer) => {
+                response.send(InstallerQueueResult::ModError(mod_data.common.identifier, "Not implemented".to_string())).ok();
+            }
         }
     }
 

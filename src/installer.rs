@@ -6,7 +6,7 @@ use zip::result::ZipError;
 use std::{fs, io, env};
 use std::path::PathBuf;
 use crate::installer::Installer::{PC, Quest};
-use crate::beatsaver::{BeatSaverMap, MapVersion, BeatSaverError, BeatSaverDownloadError};
+use crate::beatsaver::{BeatSaverMap, MapVersion};
 use tokio::task::JoinHandle;
 use curl::easy::{Form, List};
 use std::process::Command;
@@ -41,10 +41,10 @@ impl From<ConfigData> for Installer {
 
 #[derive(Error, Debug)]
 pub enum InstallError {
+    #[error("Failed to install to file {0}: {1}")]
+    FileIoError(PathBuf, std::io::Error),
     #[error(transparent)]
-    BeatSaverRequestError(#[from] BeatSaverError),
-    #[error(transparent)]
-    BeatSaverDownloadError(#[from] BeatSaverDownloadError),
+    ZipError(#[from] ZipError),
 }
 
 #[derive(Error, Debug)]
@@ -79,7 +79,7 @@ pub async fn push_map_to_install_queues(hash: String) -> Result<(), InstallReque
 }
 
 impl PcInstaller {
-    pub fn install_map(&self, map: BeatSaverMap, data: &[u8]) {
+    pub fn install_map(&self, map: BeatSaverMap, data: &[u8]) -> Result<(), InstallError> {
         let mut full_name = map.id.clone();
         full_name.push_str(" (");
         full_name.push_str(map.metadata.song_name.as_str());
@@ -101,29 +101,30 @@ impl PcInstaller {
             .replace(">", "")
             .replace("|", ""));
         info!("Unzipping to {}", target.display());
-        if let Ok(archive) = as_zip_archive(data) {
-            unzip_to(archive, target);
-        }
+        let archive = as_zip_archive(data)?;
+        unzip_to(archive, target);
+        Ok(())
     }
 
-    pub fn install_mod_zip(&self, sub_path: Option<String>, data: &[u8]) {
+    pub fn install_mod_zip(&self, sub_path: Option<String>, data: &[u8]) -> Result<(), InstallError> {
         let target = self.config.install_location.clone();
         let mut target = PathBuf::from(target);
         if let Some(sub_path) = sub_path {
             target.push(sub_path);
         }
         info!("Unzipping to {}", target.display());
-        if let Ok(archive) = as_zip_archive(data) {
-            unzip_to(archive, target);
-        }
+        let archive = as_zip_archive(data)?;
+        unzip_to(archive, target);
+        Ok(())
     }
 
-    pub fn install_mod_dll(&self, name: String, data: &[u8]) -> io::Result<()> {
+    pub fn install_mod_dll(&self, name: String, data: &[u8]) -> Result<(), InstallError> {
         let target = self.config.install_location.clone();
         let mut target = PathBuf::from(target);
         target.push("Plugins");
         target.push(name);
         fs::write(target.as_path(), data)
+            .map_err(|err| InstallError::FileIoError(target, err))
     }
 }
 
@@ -159,7 +160,7 @@ impl QuestInstaller {
                             Err(format!("Couldn't start adb (is it installed / in path?): {}", err))
                         } else {
                             Err("adb: Couldn't connect to device".to_owned())
-                        }
+                        };
                     }
                 }
             }
@@ -178,7 +179,7 @@ impl QuestInstaller {
                         Err(format!("Couldn't start adb (is it installed / in path?): {}", err))
                     } else {
                         Err("adb: Couldn't connect to device".to_owned())
-                    }
+                    };
                 }
             }
             let mut tmp_dir_adb = tmp_dir.to_str().unwrap().to_owned();
@@ -194,7 +195,7 @@ impl QuestInstaller {
                         Err(format!("Couldn't start adb (is it installed / in path?): {}", err))
                     } else {
                         Err("adb: Couldn't connect to device".to_owned())
-                    }
+                    };
                 }
             }
             Ok(None)
@@ -282,23 +283,15 @@ fn unzip_to<R: Read + Seek>(mut archive: ZipArchive<R>, target: PathBuf) {
     }
 }
 
-fn as_zip_archive(bytes: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>, ()> {
+fn as_zip_archive(bytes: &[u8]) -> Result<ZipArchive<Cursor<&[u8]>>, InstallError> {
     let buf = Cursor::new(bytes);
     let archive = zip::ZipArchive::new(buf);
     match archive {
         Ok(archive) => {
             return Ok(archive);
         }
-        Err(error) => {
-            match error {
-                ZipError::Io(error) => error!("IOError when reading zip: {}", error),
-                ZipError::InvalidArchive(error) => error!("Invalid zip archive: {}", error),
-                ZipError::UnsupportedArchive(error) => error!("Unsupported archive format: {}", error),
-                ZipError::FileNotFound => error!("File not found")
-            }
-        }
+        Err(error) => Err(error.into())
     }
-    Err(())
 }
 
 pub(crate) fn execute_adb(command: String, args: Vec<&str>) -> Result<(), Option<std::io::Error>> {
