@@ -1,4 +1,4 @@
-use crate::websocket_handler::{ConfigData, InstallType};
+use crate::websocket_handler::{ConfigData, InstallType, WebSocketMod};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::fs::File;
@@ -248,6 +248,13 @@ impl DaemonConfig {
     pub async fn queue_map(&self, map: String) -> Result<(), tokio::sync::mpsc::error::SendError<DownloadQueueRequest>> {
         self.download_queue.send(DownloadQueueRequest::Map(map)).await
     }
+
+    pub async fn queue_mod(&self, data: WebSocketMod) -> Result<(), tokio::sync::mpsc::error::SendError<DownloadQueueRequest>> {
+        match data {
+            WebSocketMod::PcMod(mod_data) => self.download_queue.send(DownloadQueueRequest::PcMod(mod_data)).await,
+            WebSocketMod::QuestMod(mod_data) => self.download_queue.send(DownloadQueueRequest::QuestMod(mod_data)).await,
+        }
+    }
 }
 
 impl LocalData {
@@ -276,7 +283,8 @@ impl LocalData {
                                             match error {
                                                 BeatSaverError::RequestError(err, _) => error!("Unexpected request error: {}", err),
                                                 BeatSaverError::StatusCodeError(_) => map_index.push(MapData::Unknown(path, hash)),
-                                                BeatSaverError::JsonError(err, _, _) => error!("Unexpected json error: {}", err)
+                                                BeatSaverError::JsonError(err, _, _) => error!("Unexpected json error: {}", err),
+                                                BeatSaverError::HttpError(err) => error!("Unexpected http error: {:?}", err)
                                             }
                                         }
                                     }
@@ -406,15 +414,6 @@ impl MapData {
         match self {
             MapData::Valid(map) => map.id.eq(&u32::from_str_radix(id, 16).unwrap_or_default()),
             _ => false
-        }
-    }
-}
-
-impl Into<Option<MapMetadata>> for MapData {
-    fn into(self) -> Option<MapMetadata> {
-        match self {
-            MapData::Valid(meta) => Some(meta),
-            _ => None
         }
     }
 }

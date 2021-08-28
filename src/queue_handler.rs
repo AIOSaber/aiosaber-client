@@ -5,14 +5,16 @@ use tokio::sync::Semaphore;
 use log::{info, error};
 use crate::beatsaver;
 use crate::beatsaver::{MapVersion, BeatSaverMap};
-use crate::websocket_handler::{WebSocketHandler, WebSocketMessage, ResultMsg, ConfigData, ResultMessageData};
-use crate::websocket_handler::ResultMessageData::MapInstallError;
+use crate::websocket_handler::{WebSocketHandler, WebSocketMessage, ResultMsg, ConfigData, ResultMessageData, WebSocketPcModData, WebSocketQuestModData, WebSocketPcModType};
+use crate::websocket_handler::ResultMessageData::{MapInstallError, ModInstallError};
 use crate::installer::Installer;
 use std::sync::Arc;
 use thiserror::Error;
 
 pub enum DownloadQueueRequest {
-    Map(String)
+    Map(String),
+    PcMod(WebSocketPcModData),
+    QuestMod(WebSocketQuestModData),
 }
 
 pub struct DownloadQueueHandler {
@@ -43,22 +45,36 @@ impl DownloadQueueHandler {
             match receiver.await {
                 Ok(result) => {
                     match result {
-                        InstallerQueueResult::Success(map, version) => {
+                        InstallerQueueResult::MapSuccess(map, version) => {
                             WebSocketHandler::send_static(websocket, WebSocketMessage::ResultResponse(ResultMsg {
                                 action: "InstallMaps".to_string(),
                                 success: true,
                                 data: ResultMessageData::MapInstallSuccess(config.id, map.id, version.hash),
                             }))
                         }
-                        InstallerQueueResult::Error(map, _, error) => {
+                        InstallerQueueResult::MapError(map, _, error) => {
                             WebSocketHandler::send_static(websocket, WebSocketMessage::ResultResponse(ResultMsg {
                                 action: "InstallMaps".to_string(),
                                 success: false,
                                 data: ResultMessageData::MapInstallError(Some(config.id), map.id, error.to_string()),
                             }))
                         }
-                        InstallerQueueResult::AlreadyInstalled(map, version) => {
+                        InstallerQueueResult::MapAlreadyInstalled(map, version) => {
                             info!("Map {} ({}) was already installed... Skipping", map.id, version.hash);
+                        }
+                        InstallerQueueResult::ModSuccess(identifier) => {
+                            WebSocketHandler::send_static(websocket, WebSocketMessage::ResultResponse(ResultMsg {
+                                action: "InstallMods".to_string(),
+                                success: true,
+                                data: ResultMessageData::Simple(identifier),
+                            }))
+                        }
+                        InstallerQueueResult::ModError(identifier, error) => {
+                            WebSocketHandler::send_static(websocket, WebSocketMessage::ResultResponse(ResultMsg {
+                                action: "InstallMods".to_string(),
+                                success: false,
+                                data: ResultMessageData::ModInstallError(identifier, error),
+                            }))
                         }
                     }
                 }
@@ -125,9 +141,57 @@ impl DownloadQueueHandler {
         }
     }
 
+    async fn download_pc_mod(config: DownloadQueueHandlerConfiguration, data: WebSocketPcModData) {
+        let download_url = data.common.url.clone();
+        let result = crate::http_client::download(move |client| client.get(download_url)).await;
+        match result {
+            Ok(file_content) => {
+                let installers = config.config.get_data().await;
+                if installers.is_empty() {
+                    error!("No installers configured");
+                    return;
+                }
+                if installers.len() == 1 {
+                    let installer = installers.first().unwrap();
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+                    if let Some(err) = installer.installer_queue
+                        .send(InstallerQueueRequest::create(tx, InstallerQueueData::PcMod(data, file_content)))
+                        .await
+                        .err() {
+                        error!("Failed to send mod data to installer: {}", err);
+                    } else {
+                        DownloadQueueHandler::handle_install_result(installer.config.clone(), rx, config.websocket.clone());
+                    }
+                } else {
+                    for installer in installers.into_iter() {
+                        let (tx, rx) = tokio::sync::oneshot::channel();
+                        if let Some(err) = installer.installer_queue
+                            .send(InstallerQueueRequest::create(tx, InstallerQueueData::PcMod(data.clone(), file_content.clone())))
+                            .await
+                            .err() {
+                            error!("Failed to send mod data to installer: {}", err);
+                        } else {
+                            DownloadQueueHandler::handle_install_result(installer.config.clone(), rx, config.websocket.clone());
+                        }
+                    }
+                }
+            }
+            Err(error) => {
+                error!("HttpError: {:?}", error);
+                WebSocketHandler::send_static(config.websocket.clone(), WebSocketMessage::ResultResponse(ResultMsg {
+                    action: "InstallMaps".to_string(),
+                    success: false,
+                    data: ModInstallError(data.common.identifier, error.to_string()),
+                }))
+            }
+        }
+    }
+
     async fn handle_request(config: DownloadQueueHandlerConfiguration, request: DownloadQueueRequest) {
         match request {
-            DownloadQueueRequest::Map(map) => DownloadQueueHandler::download_map(config, map).await
+            DownloadQueueRequest::Map(map) => DownloadQueueHandler::download_map(config, map).await,
+            DownloadQueueRequest::PcMod(data) => DownloadQueueHandler::download_pc_mod(config, data).await,
+            DownloadQueueRequest::QuestMod(_data) => {}
         }
     }
 
@@ -171,7 +235,9 @@ impl InstallerQueueRequest {
 }
 
 pub enum InstallerQueueData {
-    Map(BeatSaverMap, MapVersion, Vec<u8>)
+    Map(BeatSaverMap, MapVersion, Vec<u8>),
+    PcMod(WebSocketPcModData, Vec<u8>),
+    QuestMod(WebSocketQuestModData, Vec<u8>),
 }
 
 pub struct InstallerQueue {
@@ -181,9 +247,11 @@ pub struct InstallerQueue {
 }
 
 pub enum InstallerQueueResult {
-    Success(BeatSaverMap, MapVersion),
-    Error(BeatSaverMap, MapVersion, InstallerQueueError),
-    AlreadyInstalled(BeatSaverMap, MapVersion)
+    MapSuccess(BeatSaverMap, MapVersion),
+    MapError(BeatSaverMap, MapVersion, InstallerQueueError),
+    MapAlreadyInstalled(BeatSaverMap, MapVersion),
+    ModSuccess(String),
+    ModError(String, String),
 }
 
 #[derive(Error, Debug)]
@@ -208,14 +276,14 @@ impl InstallerQueue {
         if self.config.map_index.lock().await
             .iter()
             .any(|map_data| map_data.has_hash(version.hash.as_str())) {
-            response.send(InstallerQueueResult::AlreadyInstalled(map, version)).ok();
+            response.send(InstallerQueueResult::MapAlreadyInstalled(map, version)).ok();
             return;
         }
         match self.installer.clone() {
             Installer::PC(pc) => {
                 pc.install_map(map.clone(), data.as_ref());
                 info!("PC install task succeeded!");
-                if response.send(InstallerQueueResult::Success(map, version)).is_err() {
+                if response.send(InstallerQueueResult::MapSuccess(map, version)).is_err() {
                     error!("Error when sending result");
                 }
             }
@@ -261,7 +329,7 @@ impl InstallerQueue {
                     }
                 }
                 if success {
-                    if response.send(InstallerQueueResult::Success(map, version)).is_err() {
+                    if response.send(InstallerQueueResult::MapSuccess(map, version)).is_err() {
                         error!("Error when sending result");
                     }
                 } else {
@@ -272,11 +340,24 @@ impl InstallerQueue {
                     } else {
                         InstallerQueueError::TriesExceeded("Unknown".to_owned())
                     };
-                    if response.send(InstallerQueueResult::Error(map, version, error)).is_err() {
+                    if response.send(InstallerQueueResult::MapError(map, version, error)).is_err() {
                         error!("Error when sending result");
                     }
                 }
             }
+        }
+    }
+
+    async fn install_mod(&self, mod_data: WebSocketPcModData, file_content: Vec<u8>, response: tokio::sync::oneshot::Sender<InstallerQueueResult>) {
+        match &self.installer {
+            Installer::PC(installer) => {
+                match mod_data.data {
+                    WebSocketPcModType::DLL(name) => installer.install_mod_dll(name, file_content.as_ref()),
+                    WebSocketPcModType::ZIP(path) => installer.install_mod_zip(path, file_content.as_ref()),
+                }
+                response.send(InstallerQueueResult::ModSuccess(mod_data.common.identifier)).ok();
+            }
+            Installer::Quest(_installer) => {}
         }
     }
 
@@ -285,7 +366,9 @@ impl InstallerQueue {
             loop {
                 if let Some(request) = self.receiver.recv().await {
                     match request.data {
-                        InstallerQueueData::Map(map, version, data) => self.install_map(map, version, data, request.channel).await
+                        InstallerQueueData::Map(map, version, data) => self.install_map(map, version, data, request.channel).await,
+                        InstallerQueueData::PcMod(mod_data, file_content) => self.install_mod(mod_data, file_content, request.channel).await,
+                        InstallerQueueData::QuestMod(_mod_data, _file_content) => {}
                     }
                 }
             }

@@ -3,6 +3,7 @@ use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use log::info;
 use thiserror::Error;
+use crate::http_client::HttpError;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +41,8 @@ pub struct MapVersion {
 
 #[derive(Error, Debug)]
 pub enum BeatSaverError {
+    #[error(transparent)]
+    HttpError(HttpError),
     #[error("An error occurred when trying to request {1}: {0}")]
     RequestError(reqwest::Error, String),
     #[error("Request to beatsaver returned error code: {0}")]
@@ -74,31 +77,9 @@ pub fn find_latest_version(map: &BeatSaverMap) -> Option<MapVersion> {
 }
 
 pub async fn download_zip(version: &MapVersion) -> Result<Vec<u8>, BeatSaverError> {
-    let client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(600))
-        .build().unwrap();
-    let download_url = version.download_url.clone();
-    let result = client.get(download_url.clone())
-        .header("User-Agent", "AIOSaber-Client")
-        .send()
-        .await;
-    match result {
-        Ok(response) => {
-            if response.status().is_success() {
-                match response.bytes().await {
-                    Ok(bytes) => {
-                        let buf = bytes.clone();
-                        return Ok(buf.to_vec());
-                    }
-                    Err(error) => Err(BeatSaverError::RequestError(error, download_url))
-                }
-            } else {
-                Err(BeatSaverError::StatusCodeError(response.status().as_u16()))
-            }
-        }
-        Err(error) => Err(BeatSaverError::RequestError(error, download_url))
-    }
+    crate::http_client::download(move |client| client.get(version.download_url.clone()))
+        .await
+        .map_err(|err| BeatSaverError::HttpError(err))
 }
 
 pub fn get_beatsaver_base_url() -> String {

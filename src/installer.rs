@@ -105,6 +105,26 @@ impl PcInstaller {
             unzip_to(archive, target);
         }
     }
+
+    pub fn install_mod_zip(&self, sub_path: Option<String>, data: &[u8]) {
+        let target = self.config.install_location.clone();
+        let mut target = PathBuf::from(target);
+        if let Some(sub_path) = sub_path {
+            target.push(sub_path);
+        }
+        info!("Unzipping to {}", target.display());
+        if let Ok(archive) = as_zip_archive(data) {
+            unzip_to(archive, target);
+        }
+    }
+
+    pub fn install_mod_dll(&self, name: String, data: &[u8]) {
+        let target = self.config.install_location.clone();
+        let mut target = PathBuf::from(target);
+        target.push("Plugins");
+        target.push(name);
+        fs::write(target.as_path(), data).unwrap()
+    }
 }
 
 impl QuestInstaller {

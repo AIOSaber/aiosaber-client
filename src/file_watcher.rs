@@ -61,9 +61,15 @@ impl PcMapsWatcher {
 
     async fn handle_removed(&self, config: LocalData, path: PathBuf) {
         let mut mutex = config.map_index.lock().await;
-        let meta: Option<MapMetadata> = mutex.iter()
-            .filter_map(|map| map.into())
-            .nth(0);
+        let meta = mutex.iter()
+            .filter_map(|map| {
+                match map {
+                    MapData::Valid(meta) => Some(meta),
+                    _ => None
+                }
+            })
+            .nth(0)
+            .cloned();
         mutex.retain(|entry| entry.as_ref().ne(&path));
         std::mem::drop(mutex);
         config.rewrite_map_index().await;

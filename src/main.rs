@@ -7,6 +7,7 @@ mod installer;
 mod map_index;
 mod queue_handler;
 mod file_watcher;
+mod http_client;
 
 #[cfg(not(target_family = "windows"))]
 use jemallocator::Jemalloc;

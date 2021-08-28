@@ -19,9 +19,42 @@ pub enum WebSocketMessage {
     UpdateConfig(Vec<ConfigData>),
     SetupOneClick(),
     ResultResponse(ResultMsg),
-    InstallMaps(InstallData),
-    InstallPcMods(InstallData),
-    InstallQuestMods(InstallData),
+    InstallMaps(Vec<String>),
+    InstallMods(Vec<WebSocketMod>),
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(tag = "type", content = "data")]
+pub enum WebSocketMod {
+    PcMod(WebSocketPcModData),
+    QuestMod(WebSocketQuestModData)
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct WebSocketCommonModData {
+    pub identifier: String,
+    pub url: String,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct WebSocketQuestModData {
+    #[serde(flatten)]
+    pub common: WebSocketCommonModData
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct WebSocketPcModData {
+    #[serde(flatten)]
+    pub common: WebSocketCommonModData,
+    #[serde(flatten)]
+    pub data: WebSocketPcModType
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(tag = "mod_type", content = "content")]
+pub enum WebSocketPcModType {
+    DLL(String),
+    ZIP(Option<String>)
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -50,7 +83,8 @@ pub struct ResultMsg {
 pub enum ResultMessageData {
     Simple(String),
     MapInstallError(Option<Uuid>, String, String),
-    MapInstallSuccess(Uuid, String, String)
+    MapInstallSuccess(Uuid, String, String),
+    ModInstallError(String, String)
 }
 
 impl ToString for InstallType {
@@ -146,26 +180,17 @@ impl WebSocketHandler {
                     data: ResultMessageData::Simple(msg),
                 }))
             }
-            WebSocketMessage::InstallMaps(_maps) => {
-                Some(WebSocketMessage::ResultResponse(ResultMsg {
-                    action,
-                    success: false,
-                    data: ResultMessageData::Simple("Not implemented".to_string()),
-                }))
+            WebSocketMessage::InstallMaps(maps) => {
+                for map in maps.into_iter() {
+                    self.config.queue_map(map).await.ok();
+                }
+                None
             }
-            WebSocketMessage::InstallPcMods(_mods) => {
-                Some(WebSocketMessage::ResultResponse(ResultMsg {
-                    action,
-                    success: false,
-                    data: ResultMessageData::Simple("Not implemented".to_string()),
-                }))
-            }
-            WebSocketMessage::InstallQuestMods(_mods) => {
-                Some(WebSocketMessage::ResultResponse(ResultMsg {
-                    action,
-                    success: false,
-                    data: ResultMessageData::Simple("Not implemented".to_string()),
-                }))
+            WebSocketMessage::InstallMods(mods) => {
+                for mod_data in mods.into_iter() {
+                    self.config.queue_mod(mod_data).await.ok();
+                }
+                None
             }
             _ => {
                 error!("Received client message from server");
@@ -187,8 +212,7 @@ impl ToString for WebSocketMessage {
             WebSocketMessage::SetupOneClick() => "SetupOneClick",
             WebSocketMessage::ResultResponse(_) => "ResultResponse",
             WebSocketMessage::InstallMaps(_) => "InstallMaps",
-            WebSocketMessage::InstallPcMods(_) => "InstallPcMods",
-            WebSocketMessage::InstallQuestMods(_) => "InstallQuestMods"
+            WebSocketMessage::InstallMods(_) => "InstallMods",
         }.to_string()
     }
 }
