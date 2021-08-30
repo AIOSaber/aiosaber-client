@@ -1,4 +1,4 @@
-use crate::websocket_handler::{ConfigData, InstallType};
+use crate::websocket_handler::{ConfigData, InstallType, WebSocketMod};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use std::fs::File;
@@ -12,7 +12,7 @@ use crate::queue_handler::{DownloadQueueRequest, InstallerQueueRequest, Installe
 use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 use crate::map_index::IndexError;
-use crate::beatsaver::BeatSaverError;
+use crate::beatsaver::{BeatSaverError, BeatSaverMap};
 use uuid::Uuid;
 use std::collections::HashMap;
 use crate::file_watcher::PcMapsWatcher;
@@ -49,9 +49,9 @@ pub struct DaemonConfig {
 }
 
 pub enum AuditLogAction {
-    MapInstall(String),
+    MapInstall(BeatSaverMap),
     ModInstall(String),
-    MapDelete(String),
+    MapDelete(u32, String),
     ModDelete(String),
 }
 
@@ -248,6 +248,13 @@ impl DaemonConfig {
     pub async fn queue_map(&self, map: String) -> Result<(), tokio::sync::mpsc::error::SendError<DownloadQueueRequest>> {
         self.download_queue.send(DownloadQueueRequest::Map(map)).await
     }
+
+    pub async fn queue_mod(&self, data: WebSocketMod) -> Result<(), tokio::sync::mpsc::error::SendError<DownloadQueueRequest>> {
+        match data {
+            WebSocketMod::PcMod(mod_data) => self.download_queue.send(DownloadQueueRequest::PcMod(mod_data)).await,
+            WebSocketMod::QuestMod(mod_data) => self.download_queue.send(DownloadQueueRequest::QuestMod(mod_data)).await,
+        }
+    }
 }
 
 impl LocalData {
@@ -276,7 +283,8 @@ impl LocalData {
                                             match error {
                                                 BeatSaverError::RequestError(err, _) => error!("Unexpected request error: {}", err),
                                                 BeatSaverError::StatusCodeError(_) => map_index.push(MapData::Unknown(path, hash)),
-                                                BeatSaverError::JsonError(err, _, _) => error!("Unexpected json error: {}", err)
+                                                BeatSaverError::JsonError(err, _, _) => error!("Unexpected json error: {}", err),
+                                                BeatSaverError::HttpError(err) => error!("Unexpected http error: {:?}", err)
                                             }
                                         }
                                     }

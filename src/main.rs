@@ -7,6 +7,7 @@ mod installer;
 mod map_index;
 mod queue_handler;
 mod file_watcher;
+mod http_client;
 
 #[cfg(not(target_family = "windows"))]
 use jemallocator::Jemalloc;
@@ -34,6 +35,20 @@ async fn main() {
 
     if env::args().len() > 1 {
         let operator: String = env::args().nth(1).unwrap();
+
+        if operator.eq("--serialize-mod-json") {
+            let json = serde_json::to_string(&crate::websocket_handler::WebSocketMod::PcMod(
+                crate::websocket_handler::WebSocketPcModData {
+                    common: crate::websocket_handler::WebSocketCommonModData {
+                        identifier: "test".to_string(),
+                        url: "http://test.com".to_string()
+                    },
+                    data: crate::websocket_handler::WebSocketPcModType::DLL("test.dll".to_string())
+                }
+            )).expect("Failed to serialize json");
+            info!("{}", json);
+            return;
+        }
 
         if operator.eq("--watcher") {
             let (tx, _) = tokio::sync::mpsc::channel(1);
