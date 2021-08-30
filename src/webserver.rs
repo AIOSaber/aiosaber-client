@@ -37,7 +37,9 @@ impl WebServer {
                     "https://scoresaber.com",
                     "https://aiosaber.zerotwo.workers.dev",
                     #[cfg(debug_assertions)]
-                    "http://localhost:*",
+                        "http://localhost:63343",
+                    #[cfg(debug_assertions)]
+                        "http://localhost:3000",
                 ]);
 
             let shutdown = warp::get()
